@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// SponsorBlockCategories are the SponsorBlock categories yt-dlp can cut out
+// with --sponsorblock-remove; "all" selects every one of them.
+var SponsorBlockCategories = []string{"sponsor", "intro", "outro", "selfpromo", "preview", "filler", "interaction", "music_offtopic"}
+
 // Job describes a single download.
 type Job struct {
 	URL                string
@@ -66,6 +70,9 @@ func (j Job) Args() []string {
 	}
 	if j.CookiesFromBrowser != "" {
 		args = append(args, "--cookies-from-browser", j.CookiesFromBrowser)
+	}
+	if j.SponsorBlockRemove != "" {
+		args = append(args, "--sponsorblock-remove", j.SponsorBlockRemove)
 	}
 	if j.ForceOverwrites {
 		args = append(args, "--force-overwrites")

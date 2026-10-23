@@ -573,6 +573,22 @@ func TestSetConfigRaisesConcurrency(t *testing.T) {
 	r.waitStarted(t, "b")
 }
 
+func TestJobUsesSponsorBlockSetting(t *testing.T) {
+	for _, categories := range []string{"", "sponsor,selfpromo"} {
+		t.Run(categories, func(t *testing.T) {
+			m, r := newManager(t, 1, &MemStore{})
+			cfg := m.Config()
+			cfg.SponsorBlockRemove = categories
+			m.SetConfig(cfg)
+			add(m, "a")
+			r.waitStarted(t, "a")
+			if got := r.job("a").SponsorBlockRemove; got != categories {
+				t.Errorf("job SponsorBlockRemove = %q, want %q", got, categories)
+			}
+		})
+	}
+}
+
 // overrides are the per-download settings a job was run with.
 type overrides struct {
 	Template  string

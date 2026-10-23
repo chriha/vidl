@@ -437,6 +437,7 @@ func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 		CookiesFromBrowser: c.CookiesFromBrowser,
 		Clip:               it.Clip(),
 		ForceOverwrites:    it.redownload(),
+		SponsorBlockRemove: c.SponsorBlockRemove,
 	}
 }
 

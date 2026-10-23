@@ -33,8 +33,8 @@ type Config struct {
 	EmbedMetadata      bool         `toml:"embed_metadata"`
 	RateLimit          string       `toml:"rate_limit"`
 	CookiesFromBrowser string       `toml:"cookies_from_browser"`
-	Notify             bool         `toml:"notify"` // desktop notification when a download finishes or fails
-	SponsorBlockRemove string       // SponsorBlock categories to cut out, empty to disable
+	Notify             bool         `toml:"notify"`              // desktop notification when a download finishes or fails
+	SponsorBlockRemove string       `toml:"sponsorblock_remove"` // SponsorBlock categories to cut out, empty to disable
 }
 
 func Default() Config {
