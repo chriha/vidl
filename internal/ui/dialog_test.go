@@ -544,9 +544,19 @@ func entriesDialog(t *testing.T, n int) (Model, *queue.Manager) {
 	return m, mgr
 }
 
+func countChecked(checked []bool) int {
+	n := 0
+	for _, c := range checked {
+		if c {
+			n++
+		}
+	}
+	return n
+}
+
 func TestDialogEntriesStartChecked(t *testing.T) {
 	m, _ := entriesDialog(t, 3)
-	if d := m.dialog; len(d.checked) != 3 || checkedCount(d.checked) != 3 || d.cursor != 0 {
+	if d := m.dialog; len(d.checked) != 3 || countChecked(d.checked) != 3 || d.cursor != 0 {
 		t.Errorf("checked = %v, cursor = %d", d.checked, d.cursor)
 	}
 }
@@ -578,11 +588,11 @@ func TestDialogEntriesToggleMovesDown(t *testing.T) {
 func TestDialogEntriesToggleAll(t *testing.T) {
 	m, _ := entriesDialog(t, 3)
 	m = press(t, m, "space", "a") // one unchecked: check all
-	if n := checkedCount(m.dialog.checked); n != 3 {
+	if n := countChecked(m.dialog.checked); n != 3 {
 		t.Errorf("checked = %d, want 3", n)
 	}
 	m = press(t, m, "a") // all checked: uncheck all
-	if n := checkedCount(m.dialog.checked); n != 0 {
+	if n := countChecked(m.dialog.checked); n != 0 {
 		t.Errorf("checked = %d, want 0", n)
 	}
 }
@@ -652,7 +662,7 @@ func TestDialogEntriesEsc(t *testing.T) {
 		t.Fatalf("step = %d, want details", m.dialog.step)
 	}
 	m = press(t, m, "esc")
-	if d := m.dialog; d.step != stepEntries || d.checked[0] || checkedCount(d.checked) != 2 {
+	if d := m.dialog; d.step != stepEntries || d.checked[0] || countChecked(d.checked) != 2 {
 		t.Errorf("step = %d, checked = %v: selection not kept", d.step, d.checked)
 	}
 	m = press(t, m, "esc")
@@ -662,7 +672,7 @@ func TestDialogEntriesEsc(t *testing.T) {
 	// A new probe resets the selection.
 	m, res := submit(t, m)
 	m = update(t, m, res)
-	if d := m.dialog; d.step != stepEntries || checkedCount(d.checked) != 3 {
+	if d := m.dialog; d.step != stepEntries || countChecked(d.checked) != 3 {
 		t.Errorf("step = %d, checked = %v, want all checked", d.step, d.checked)
 	}
 }
