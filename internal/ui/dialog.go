@@ -34,9 +34,14 @@ const (
 	stepBatch // several pasted URLs, queued with defaults
 )
 
+// Fields of the details step, in tab order.
 const (
 	focusFormat = iota
 	focusResolution
+	focusClipStart // single videos only
+	focusClipEnd   // single videos only
+	focusTemplate
+	focusSubtitles
 )
 
 // playlistPreview is the number of playlist entries listed in the dialog.
@@ -75,6 +80,10 @@ type newDialog struct {
 	format      int // index into ytdlp.Formats
 	resolutions []string
 	res         int // index into resolutions
+	clipStart   textinput.Model
+	clipEnd     textinput.Model
+	template    textinput.Model // empty for the setting
+	subtitles   bool
 
 	batch []string
 }
