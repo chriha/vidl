@@ -1,0 +1,10 @@
+{
+ "_type": "video",
+ "id": "def456",
+ "title": "Approximate only",
+ "uploader": "Uploader",
+ "extractor_key": "Generic",
+ "duration": 120,
+ "format_id": "hls-1080p",
+ "filesize_approx": 52428800
+}
