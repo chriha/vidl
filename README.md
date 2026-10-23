@@ -10,8 +10,9 @@ for every item. The queue and history survive restarts, and interrupted
 downloads resume where they stopped.
 
 > **Status:** early development. The download engine, queue, persistence and
-> configuration are complete and tested; the full UI (tables with progress
-> bars, detail panel, new-download dialog, settings editor) is in progress.
+> configuration are complete and tested, and so are the Downloads and Finished
+> tables; the detail panel, new-download dialog and settings editor are in
+> progress.
 > See [Roadmap](#roadmap) for what works today.
 
 ## Features
@@ -120,7 +121,7 @@ automatically the next time you start vidl.
 | `j` / `↓`             | Move down                                      | ✅      |
 | `k` / `↑`             | Move up                                        | ✅      |
 | `g` / `G`             | Jump to top / bottom                           | ✅      |
-| `ctrl+d` / `ctrl+u`   | Page down / up                                 | planned |
+| `ctrl+d` / `ctrl+u`   | Half page down / up                            | ✅      |
 | `tab` / `l`           | Next tab                                       | ✅      |
 | `shift+tab` / `h`     | Previous tab                                   | ✅      |
 | `1` `2` `3`           | Go to Downloads / Finished / Settings          | ✅      |
@@ -129,10 +130,10 @@ automatically the next time you start vidl.
 | `c`                   | Cancel (deletes partial files)                 | ✅      |
 | `enter`               | Toggle the detail panel                        | planned |
 | `n`                   | New download                                   | planned |
-| `r`                   | Remove (asks for confirmation)                 | planned |
-| `u` / `d`             | Move queued download up / down                 | planned |
+| `r`                   | Remove (asks for confirmation)                 | ✅      |
+| `u` / `d`             | Move queued download up / down                 | ✅      |
 | `/`                   | Search / filter                                | planned |
-| `R`                   | Retry failed download                          | planned |
+| `R`                   | Retry failed or cancelled download             | ✅      |
 | `o`                   | Open file (Finished tab)                       | planned |
 | `X`                   | Clear finished history                         | planned |
 | `?`                   | Toggle full help                               | ✅      |
@@ -295,7 +296,7 @@ directly to see whether the problem is the site or vidl.
       reorder, remove, persistence
 - [x] Configuration file
 - [x] UI scaffold: tabs, navigation, help
-- [ ] Downloads and Finished tables with progress bars, speed and ETA
+- [x] Downloads and Finished tables with progress bars, speed and ETA
 - [ ] Detail panel (`enter`)
 - [ ] New-download dialog with format and resolution selection, playlist
       expansion and multi-URL paste

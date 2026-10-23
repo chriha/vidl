@@ -56,6 +56,7 @@ type Item struct {
 	Status     Status         `json:"status"`
 	Progress   ytdlp.Progress `json:"progress"`
 	FilePath   string         `json:"file_path,omitempty"`
+	Size       int64          `json:"size,omitempty"` // of FilePath, once finished
 	Error      string         `json:"error,omitempty"`
 	PartFiles  []string       `json:"part_files,omitempty"`
 	Log        []string       `json:"-"`

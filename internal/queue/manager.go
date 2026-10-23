@@ -397,6 +397,17 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, it *I
 	cause := context.Cause(ctx)
 	cancel(nil)
 
+	// No events arrive once Run has returned, so FilePath is stable here and
+	// the stat can stay outside the lock.
+	var size int64
+	var statErr error
+	if err == nil && it.FilePath != "" {
+		var fi os.FileInfo
+		if fi, statErr = os.Stat(it.FilePath); statErr == nil {
+			size = fi.Size()
+		}
+	}
+
 	m.mu.Lock()
 	delete(m.active, it.ID)
 	var cleanup []string
@@ -413,6 +424,10 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, it *I
 		it.Status = Finished
 		it.FinishedAt = time.Now()
 		it.Progress.Percent = 100
+		it.Size = size
+		if statErr != nil {
+			it.appendLog("vidl: " + statErr.Error())
+		}
 		it.PartFiles = nil
 		if i := slices.Index(m.queue, it); i >= 0 {
 			m.queue = slices.Delete(m.queue, i, i+1)

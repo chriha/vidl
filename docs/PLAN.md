@@ -1,9 +1,9 @@
 # vidl implementation plan
 
-Handoff document for continuing development. Milestones 1–3 are done
-(commits `7db3830`, `fa01f28`); this file describes what was decided, what
-exists, what was learned the hard way, and what remains (milestones 4–8) in
-enough detail to proceed without the original conversation.
+Handoff document for continuing development. Milestones 1–4 are done;
+this file describes what was decided, what exists, what was learned the hard
+way, and what remains (milestones 5–8) in enough detail to proceed without
+the original conversation.
 
 Read `README.md` first for the user-facing picture, then this file.
 
@@ -189,6 +189,12 @@ help footer.
 - **zsh**: always quote URLs in shell commands (`?` is a glob and the command
   fails with `no matches found`).
 - `make fmt-check` catches gofmt drift; run `make check` before committing.
+- **Tables**: `bubbles/v2/progress` pulls in `harmonica` (a `go.mod` change),
+  so `ui/table.go` draws a static bar itself. `help.Model` can overshoot its
+  width by one item, so the footer is truncated with `ansi.Truncate`.
+- **Manual checks in tmux**: use a private server (`tmux -L vidl-test`) and
+  never `kill-session` on the default one; the developer may be running the
+  agent inside a tmux session with the same name.
 
 ## Conventions
 

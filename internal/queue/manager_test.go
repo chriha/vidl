@@ -18,11 +18,12 @@ type fakeRunner struct {
 	mu      sync.Mutex
 	results map[string]chan error
 	parts   map[string]string // url -> part file reported as being written
+	files   map[string]string // url -> final path, instead of /dl/<url>.mp4
 	started chan string
 }
 
 func newFakeRunner() *fakeRunner {
-	return &fakeRunner{results: map[string]chan error{}, parts: map[string]string{}, started: make(chan string, 100)}
+	return &fakeRunner{results: map[string]chan error{}, parts: map[string]string{}, files: map[string]string{}, started: make(chan string, 100)}
 }
 
 func (f *fakeRunner) result(url string) chan error {
@@ -38,7 +39,11 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	res := f.result(job.URL)
 	f.mu.Lock()
 	part := f.parts[job.URL]
+	file := f.files[job.URL]
 	f.mu.Unlock()
+	if file == "" {
+		file = "/dl/" + job.URL + ".mp4"
+	}
 	onEvent(ytdlp.Event{Kind: ytdlp.EventInfo, Info: ytdlp.VideoInfo{Title: "title of " + job.URL}})
 	ev := ytdlp.Event{Kind: ytdlp.EventProgress, Progress: ytdlp.Progress{Percent: 50, Speed: 1000}}
 	if part != "" {
@@ -49,7 +54,7 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	select {
 	case err := <-res:
 		if err == nil {
-			onEvent(ytdlp.Event{Kind: ytdlp.EventFile, Path: "/dl/" + job.URL + ".mp4"})
+			onEvent(ytdlp.Event{Kind: ytdlp.EventFile, Path: file})
 		}
 		return err
 	case <-ctx.Done():
@@ -148,6 +153,24 @@ func TestConcurrencyLimitAndAutoStart(t *testing.T) {
 	_, history := m.Snapshot()
 	if len(history) != 1 || history[0].FilePath != "/dl/a.mp4" || history[0].Title != "title of a" {
 		t.Errorf("history = %+v", history)
+	}
+}
+
+func TestFinishedRecordsFileSize(t *testing.T) {
+	m, r := newManager(t, 1, &MemStore{})
+	path := filepath.Join(t.TempDir(), "a.mp4")
+	if err := os.WriteFile(path, make([]byte, 1234), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.mu.Lock()
+	r.files["a"] = path
+	r.mu.Unlock()
+	id := add(m, "a")[0]
+	r.waitStarted(t, "a")
+	r.finish("a", nil)
+	waitStatus(t, m, id, Finished)
+	if it, _ := m.Get(id); it.Size != 1234 {
+		t.Errorf("size = %d, want 1234", it.Size)
 	}
 }
 
