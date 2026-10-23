@@ -283,7 +283,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, k.Reveal):
 		return m, m.openSelected(true)
 	case key.Matches(msg, k.Browse):
-		return m, m.browseSelected()
+		cmd := m.browseSelected() // after, so m carries any reported error
+		return m, cmd
 	case key.Matches(msg, k.Mark):
 		m.toggleMark()
 	case key.Matches(msg, k.MarkAll):

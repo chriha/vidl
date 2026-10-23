@@ -20,7 +20,7 @@ import (
 	"github.com/chriha/vidl/internal/ytdlp"
 )
 
-// fakeRunner fails URLs starting with "fail", and blocks the rest until
+// fakeRunner fails URLs containing "fail", and blocks the rest until
 // cancelled or released with finish, which writes <url>.mp4. Every run first logs fakeLogLines lines.
 type fakeRunner struct {
 	mu   sync.Mutex
@@ -47,13 +47,16 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	for i := range fakeLogLines {
 		onEvent(ytdlp.Event{Kind: ytdlp.EventLog, Line: fmt.Sprintf("%s line %d", job.URL, i+1)})
 	}
-	if strings.HasPrefix(job.URL, "fail") {
+	if strings.Contains(job.URL, "fail") {
 		return errors.New("boom")
 	}
 	onEvent(ytdlp.Event{Kind: ytdlp.EventProgress, Progress: ytdlp.Progress{Percent: 42, Speed: 2048, ETA: time.Minute}})
 	select {
 	case <-f.ch(job.URL):
 		path := filepath.Join(job.Dir, job.URL+".mp4")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
 		if err := os.WriteFile(path, []byte("video"), 0o644); err != nil {
 			return err
 		}
