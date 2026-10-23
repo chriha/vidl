@@ -10,7 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 const (

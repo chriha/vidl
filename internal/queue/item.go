@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 type Status int

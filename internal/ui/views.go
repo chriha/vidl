@@ -9,7 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"vidl/internal/queue"
+	"github.com/chriha/vidl/internal/queue"
 )
 
 var statusColors = map[queue.Status]color.Color{

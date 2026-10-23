@@ -14,9 +14,9 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"vidl/internal/config"
-	"vidl/internal/queue"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/config"
+	"github.com/chriha/vidl/internal/queue"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 // Prober fetches metadata for a URL without downloading it. ytdlp.Runner

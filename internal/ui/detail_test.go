@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"vidl/internal/queue"
+	"github.com/chriha/vidl/internal/queue"
 )
 
 func TestDetailToggle(t *testing.T) {

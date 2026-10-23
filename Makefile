@@ -4,7 +4,7 @@ BIN_DIR := bin
 DIST    := dist
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
-PLATFORMS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
+PLATFORMS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64
 
 .DEFAULT_GOAL := build
 .PHONY: help build run install uninstall test race cover vet fmt fmt-check lint tidy check dist clean
@@ -51,13 +51,15 @@ tidy: ## Tidy go.mod and go.sum
 
 check: fmt-check vet race ## Run all checks (formatting, vet, race tests)
 
-dist: ## Cross-compile release binaries into dist/
-	@mkdir -p $(DIST)
+dist: ## Cross-compile release binaries and checksums into dist/
+	@rm -rf $(DIST) && mkdir -p $(DIST)
 	@for p in $(PLATFORMS); do \
-		os=$${p%/*}; arch=$${p#*/}; out=$(DIST)/$(BINARY)-$(VERSION)-$$os-$$arch; \
+		os=$${p%/*}; arch=$${p#*/}; ext=; [ $$os = windows ] && ext=.exe; \
+		out=$(DIST)/$(BINARY)-$(VERSION)-$$os-$$arch$$ext; \
 		echo "building $$out"; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out $(PKG) || exit 1; \
 	done
+	@cd $(DIST) && shasum -a 256 $(BINARY)-* > checksums.txt
 
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) $(DIST) coverage.out

@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"vidl/internal/config"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/config"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 // Runner runs a single download. ytdlp.Runner implements it.

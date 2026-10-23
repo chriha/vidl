@@ -9,7 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"vidl/internal/queue"
+	"github.com/chriha/vidl/internal/queue"
 )
 
 var searchPromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)

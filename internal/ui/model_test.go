@@ -15,9 +15,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"vidl/internal/config"
-	"vidl/internal/queue"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/config"
+	"github.com/chriha/vidl/internal/queue"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 // fakeRunner fails URLs starting with "fail", and blocks the rest until

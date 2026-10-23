@@ -1,4 +1,4 @@
-module vidl
+module github.com/chriha/vidl
 
 go 1.27.3
 

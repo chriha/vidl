@@ -9,8 +9,8 @@ resolution, and it downloads in the background with progress, speed and ETA
 for every item. The queue and history survive restarts, and interrupted
 downloads resume where they stopped.
 
-> **Status:** feature complete for a first release; everything on the
-> [Roadmap](#roadmap) works. The UI is tested manually on macOS.
+> **Status:** feature complete for a first release; everything ticked on
+> the [Roadmap](#roadmap) works. The UI is tested manually on macOS.
 
 ## Features
 
@@ -50,7 +50,8 @@ downloads resume where they stopped.
 - [ffmpeg](https://ffmpeg.org) on your `PATH`, used to merge video and audio
   streams, extract audio and embed thumbnails/subtitles.
 - [Go](https://go.dev/dl/) 1.27 or newer to build from source.
-- macOS or Linux. Windows builds compile but are untested.
+- macOS or Linux. Windows is supported but less tested: pausing and
+  cancelling work, opening files from the Finished tab doesn't yet.
 
 vidl checks for yt-dlp and ffmpeg at startup and exits with an install hint
 if either is missing.
@@ -77,22 +78,48 @@ Arch Linux:
 sudo pacman -S yt-dlp ffmpeg
 ```
 
+Windows (winget):
+
+```sh
+winget install yt-dlp.yt-dlp Gyan.FFmpeg
+```
+
 YouTube additionally needs a JavaScript runtime (such as
 [Deno](https://deno.com)) for yt-dlp to see every format; see
 [Troubleshooting](#troubleshooting).
 
 ## Installation
 
-Build from source:
+Download a binary for your platform from the
+[releases page](https://github.com/chriha/vidl/releases), check it against
+`checksums.txt`, make it executable and put it on your `PATH`:
 
 ```sh
-git clone <repository-url> vidl
+shasum -a 256 -c checksums.txt --ignore-missing
+chmod +x vidl-*-darwin-arm64
+mv vidl-*-darwin-arm64 /usr/local/bin/vidl
+```
+
+On macOS, a downloaded binary is quarantined by Gatekeeper; allow it with
+`xattr -d com.apple.quarantine /usr/local/bin/vidl`.
+
+Or install with Go:
+
+```sh
+go install github.com/chriha/vidl/cmd/vidl@latest
+```
+
+Or build from source:
+
+```sh
+git clone https://github.com/chriha/vidl.git
 cd vidl
 make install        # installs into $(go env GOPATH)/bin
 ```
 
-Make sure `$(go env GOPATH)/bin` is on your `PATH`. Alternatively, build into
-the project directory with `make build` and run `./bin/vidl`.
+For `go install` and `make install`, make sure `$(go env GOPATH)/bin` is on
+your `PATH`. Alternatively, build into the project directory with
+`make build` and run `./bin/vidl`.
 
 To uninstall, run `make uninstall` and optionally remove the config directory
 (see [Files](#files)).
@@ -257,7 +284,8 @@ progress as JSON using `--progress-template` and to print video info and the
 final file path using `--print`, and parses those lines from stdout and
 stderr instead of scraping human-readable output. Pausing sends `SIGINT` to
 the yt-dlp process group (including ffmpeg), which leaves partial files in
-place so the next run continues them. Metadata for the new-download dialog
+place so the next run continues them; on Windows it sends `CTRL_BREAK`
+instead. Metadata for the new-download dialog
 comes from `yt-dlp -J --flat-playlist`.
 
 ## Development
@@ -286,10 +314,26 @@ make help       # list all targets
 | `lint`      | Run `golangci-lint` if it's installed. |
 | `tidy`      | `go mod tidy`. |
 | `check`     | `fmt-check`, `vet` and `race`. |
-| `dist`      | Cross-compile for macOS and Linux (arm64, amd64) into `dist/`. |
+| `dist`      | Cross-compile for macOS, Linux and Windows (arm64, amd64) into `dist/`, with `checksums.txt`. |
 | `clean`     | Remove `bin/`, `dist/` and coverage output. |
 
 Override the embedded version with `make build VERSION=1.0.0`.
+
+### Releasing
+
+CI runs `make check` on Linux and macOS for every push and pull request,
+and vets and builds the Windows target. To release, move the changes under
+`Unreleased` in [CHANGELOG.md](CHANGELOG.md) to a new version section, then
+tag and push:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow runs `make check` and `make dist`, and publishes the
+binaries and checksums as a GitHub release with that version's changelog
+section as release notes.
 
 To try vidl without touching your real config and downloads, point it at a
 scratch config directory:
@@ -353,7 +397,10 @@ directly to see whether the problem is the site or vidl.
 - [x] Settings tab
 - [x] Open file, clear history, search, status line, toasts, window title
       progress, small-terminal handling
+- [x] Release: MIT license, CI, release binaries, `go install`, pause and
+      cancel on Windows
+- [ ] Open files from the Finished tab on Windows
 
 ## License
 
-No license has been chosen yet.
+[MIT](LICENSE)

@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"vidl/internal/config"
+	"github.com/chriha/vidl/internal/config"
 )
 
 // settingsModel returns a model on the Settings tab with the cursor on the

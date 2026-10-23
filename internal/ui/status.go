@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"vidl/internal/queue"
+	"github.com/chriha/vidl/internal/queue"
 )
 
 // summary aggregates the queue for the status line and the window title.

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"vidl/internal/config"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/config"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 // fakeRunner blocks every download until the test finishes it via done(url).
