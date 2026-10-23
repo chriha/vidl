@@ -184,6 +184,14 @@ show a `▌` at their left edge and the status line counts them, e.g.
 when a download leaves the tab. `esc` clears the marks after closing the
 detail panel and before clearing the filters.
 
+While downloads are marked, `s`, `p`, `c`, `R` and `r` act on all marked
+downloads (including those a filter hides) instead of the selected one.
+Downloads whose state doesn't allow the action are skipped, and a message
+sums up the result, e.g. `paused 3 · skipped 1`; if any of them fails, the
+message counts the failures and shows the first error. `r` asks once for all
+marked downloads. On the Finished tab only `r` uses the marks; `u`, `d`,
+`enter`, `o`, `O` and `b` always act on the selected download.
+
 On the Finished tab, `o` opens a file with its default application and `O`
 shows it in Finder (macOS), selects it in Explorer (Windows) or opens its
 folder (Linux). Removing downloads
@@ -222,7 +230,7 @@ automatically the next time you start vidl.
 | `u` / `d`             | Move queued download up / down                      |
 | `r`                   | Remove (asks for confirmation)                      |
 | `enter`               | Toggle the detail panel                             |
-| `space`               | Mark or unmark the download and move down           |
+| `space`               | Mark or unmark the download (actions apply to all)  |
 | `V`                   | Mark all visible downloads, or unmark them all      |
 | `esc`                 | Close the detail panel, then clear marks, filters   |
 | `/`                   | Search the current tab by title or URL              |
@@ -447,6 +455,8 @@ directly to see whether the problem is the site or vidl.
 - [x] Open files from the Finished tab on Windows
 - [x] Re-download finished videos (`R`)
 - [x] Desktop notifications for finished and failed downloads
+- [x] Mark several downloads (`space`, `V`) and start, pause, cancel, retry
+      or remove them together
 
 ## License
 
