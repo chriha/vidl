@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -80,4 +81,32 @@ func TestOpenIgnoresDownloadsTab(t *testing.T) {
 
 func keyMsg(k string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
+}
+
+func TestOpenCommand(t *testing.T) {
+	const win = `C:\Videos\a [b] & c.mp4`
+	for _, tt := range []struct {
+		name   string
+		goos   string
+		path   string
+		reveal bool
+		want   openSpec
+	}{
+		{"darwin open", "darwin", "/v/a.mp4", false, openSpec{name: "open", args: []string{"/v/a.mp4"}}},
+		{"darwin reveal", "darwin", "/v/a.mp4", true, openSpec{name: "open", args: []string{"-R", "/v/a.mp4"}}},
+		{"linux open", "linux", "/v/a.mp4", false, openSpec{name: "xdg-open", args: []string{"/v/a.mp4"}}},
+		{"linux reveal opens folder", "linux", "/v/a.mp4", true, openSpec{name: "xdg-open", args: []string{"/v"}}},
+		{"windows open", "windows", win, false,
+			openSpec{name: "rundll32.exe", args: []string{"url.dll,FileProtocolHandler", win}}},
+		{"windows reveal", "windows", win, true,
+			openSpec{name: "explorer.exe", cmdLine: `explorer.exe /select,"` + win + `"`, ignoreExit: true}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := openCommand(tt.goos, tt.path, tt.reveal)
+			if got.name != tt.want.name || !slices.Equal(got.args, tt.want.args) ||
+				got.cmdLine != tt.want.cmdLine || got.ignoreExit != tt.want.ignoreExit {
+				t.Errorf("openCommand = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
 }

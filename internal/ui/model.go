@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -86,6 +88,9 @@ type Model struct {
 	settings settingsForm
 	cfgPath  string // where settings are saved
 
+	versionFn func(context.Context) (string, error) // yt-dlp version for the startup check, nil to skip
+	now       func() time.Time
+
 	probeSeq  int                    // id of the latest probe request
 	clipboard func() (string, error) // reads the system clipboard
 }
@@ -95,15 +100,22 @@ type Model struct {
 func New(mgr *queue.Manager, prober Prober, cfgPath string) Model {
 	m := Model{
 		mgr: mgr, prober: prober, keys: newKeyMap(), help: help.New(), log: viewport.New(),
-		clipboard: clipboard.ReadAll, cfgPath: cfgPath, open: systemOpen,
+		clipboard: clipboard.ReadAll, cfgPath: cfgPath, open: systemOpen, now: time.Now,
 	}
 	m.log.SoftWrap = true
 	m.refresh()
 	return m
 }
 
+// WithVersionCheck makes the model warn at startup when the yt-dlp version
+// returned by fn is older than ytdlp.StaleAfter.
+func (m Model) WithVersionCheck(fn func(context.Context) (string, error)) Model {
+	m.versionFn = fn
+	return m
+}
+
 func (m Model) Init() tea.Cmd {
-	return m.waitForChange()
+	return tea.Batch(m.waitForChange(), m.checkVersion())
 }
 
 func (m Model) waitForChange() tea.Cmd {
@@ -142,7 +154,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	next.syncLog()
 	if next.toast.seq != m.toast.seq && next.toast.text != "" {
-		cmd = tea.Batch(cmd, expireToast(next.toast.seq))
+		d := toastDuration
+		if next.toast.long {
+			d = longToastDuration
+		}
+		cmd = tea.Batch(cmd, expireToast(next.toast.seq, d))
 	}
 	return next, cmd
 }
@@ -173,6 +189,9 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case openedMsg:
 		m.report(msg.err)
+		return m, nil
+	case versionMsg:
+		m.handleVersion(msg)
 		return m, nil
 	}
 	if m.dialog != nil {
