@@ -309,7 +309,12 @@ Replace `listView` with real tables.
   the remaining space), Status (colored: downloading blue, queued gray, paused
   yellow, failed red, cancelled dim), Progress (a `bubbles/v2/progress` bar
   rendered statically with `ViewAs(percent)` after `SetWidth`, without
-  animation, plus `42%`), Speed, ETA, Size (`Progress.Total` when known). While
+  animation, plus `42%`), Speed, ETA, Size (`Progress.Total` when known,
+  else `Item.EstimatedSize` dimmed as `~X`, else `–`). The manager fills
+  `EstimatedSize` for queued, never-started items with `Runner.Estimate`
+  (`yt-dlp -J` with the item's selector), at most `maxEstimates` (2) at a
+  time in queue order, once per item and session; the result also fills empty
+  metadata, is scaled to a clip, and a failure goes to the item's log. While
   post-processing, show `Progress.Stage` (e.g. "merging") instead of
   speed/ETA. For multi-stream downloads show the stream, e.g. `2/2`, in the
   detail panel, not the table.

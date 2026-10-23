@@ -15,10 +15,15 @@ import (
 	"github.com/chriha/vidl/internal/ytdlp"
 )
 
-// Runner runs a single download. ytdlp.Runner implements it.
+// Runner runs a single download and estimates its size beforehand.
+// ytdlp.Runner implements it.
 type Runner interface {
 	Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.Event)) error
+	Estimate(ctx context.Context, url string, f ytdlp.Format, resolution, cookiesFromBrowser string) (*ytdlp.Estimate, error)
 }
+
+// maxEstimates is how many size estimates run at once, apart from downloads.
+const maxEstimates = 2
 
 // Reasons for stopping a running download, passed as context cancel causes.
 var (
@@ -64,6 +69,11 @@ type Manager struct {
 	saveErr error
 	wg      sync.WaitGroup
 	changes chan struct{}
+
+	estCtx     context.Context
+	estStop    context.CancelFunc
+	estimating int             // estimates running
+	estTried   map[string]bool // ids estimated (or being estimated) this session
 }
 
 // New loads the persisted state and starts queued downloads. Downloads that
@@ -71,12 +81,14 @@ type Manager struct {
 func New(cfg config.Config, runner Runner, store Store) (*Manager, error) {
 	st, err := store.Load()
 	m := &Manager{
-		cfg:     cfg.Normalize(),
-		runner:  runner,
-		store:   store,
-		active:  map[string]context.CancelCauseFunc{},
-		changes: make(chan struct{}, 1),
+		cfg:      cfg.Normalize(),
+		runner:   runner,
+		store:    store,
+		active:   map[string]context.CancelCauseFunc{},
+		changes:  make(chan struct{}, 1),
+		estTried: map[string]bool{},
 	}
+	m.estCtx, m.estStop = context.WithCancel(context.Background())
 	for _, it := range st.Queue {
 		if it.Status == Downloading || it.Status == Finished {
 			it.Status = Queued
@@ -357,6 +369,7 @@ func (m *Manager) ClearHistory() {
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	m.closed = true
+	m.estStop()
 	for _, cancel := range m.active {
 		cancel(errShutdown)
 	}
@@ -406,12 +419,94 @@ func (m *Manager) scheduleLocked() {
 	}
 	for _, it := range m.queue {
 		if len(m.active) >= m.cfg.Concurrency {
-			return
+			break
 		}
 		if it.Status == Queued {
 			m.startLocked(it)
 		}
 	}
+	m.scheduleEstimatesLocked()
+}
+
+// scheduleEstimatesLocked starts size estimates for queued, never-started
+// items without one, in queue order. Each item is tried once per session.
+func (m *Manager) scheduleEstimatesLocked() {
+	if m.closed {
+		return
+	}
+	for _, it := range m.queue {
+		if m.estimating >= maxEstimates {
+			return
+		}
+		if it.Status != Queued || !it.StartedAt.IsZero() || it.EstimatedSize > 0 || m.estTried[it.ID] {
+			continue
+		}
+		m.estTried[it.ID] = true
+		m.estimating++
+		m.wg.Add(1)
+		go m.estimate(it.ID, it.URL, it.Format, it.Resolution, m.cfg.CookiesFromBrowser)
+	}
+}
+
+func (m *Manager) estimate(id, url string, f ytdlp.Format, resolution, cookies string) {
+	defer m.wg.Done()
+	est, err := m.runner.Estimate(m.estCtx, url, f, resolution, cookies)
+	m.mu.Lock()
+	m.estimating--
+	// A removed item's result is dropped, as is one for an item whose
+	// download started meanwhile: its progress reports the real size.
+	if it := m.findQueuedLocked(id); it != nil && !m.closed && it.StartedAt.IsZero() {
+		applyEstimate(it, est, err)
+		m.saveLocked()
+	}
+	m.scheduleEstimatesLocked()
+	m.mu.Unlock()
+	m.notify()
+}
+
+// applyEstimate sets the item's estimated size and fills its empty metadata. A
+// failure, or an estimate without a size, goes to the item's log.
+func applyEstimate(it *Item, est *ytdlp.Estimate, err error) {
+	if err != nil {
+		it.appendLog("vidl: size estimate failed: " + err.Error())
+		return
+	}
+	if it.Title == "" {
+		it.Title = est.Title
+	}
+	if it.Uploader == "" {
+		it.Uploader = est.Uploader
+	}
+	if it.Extractor == "" {
+		it.Extractor = est.Extractor
+	}
+	if it.Duration == 0 {
+		it.Duration = est.Duration
+	}
+	if est.Size <= 0 {
+		it.appendLog("vidl: size estimate failed: yt-dlp reported no size")
+		return
+	}
+	if it.EstimatedSize = clipShare(est.Size, it.Clip(), it.Duration); it.EstimatedSize == 0 {
+		it.appendLog("vidl: size estimate failed: unknown duration, can't scale to the clip")
+	}
+}
+
+// clipShare scales size, the size of the whole video, to clip; 0 when the
+// clip's share of an unknown duration can't be known.
+func clipShare(size int64, clip ytdlp.Clip, duration float64) int64 {
+	if clip.IsZero() {
+		return size
+	}
+	end := clip.End.Seconds()
+	if end == 0 || end > duration {
+		end = duration
+	}
+	length := end - clip.Start.Seconds()
+	if duration <= 0 || length <= 0 {
+		return 0
+	}
+	return int64(float64(size) * length / duration)
 }
 
 func (m *Manager) startLocked(it *Item) {
