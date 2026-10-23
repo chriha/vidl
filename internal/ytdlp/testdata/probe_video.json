@@ -1,0 +1,182 @@
+{
+ "_type": "video",
+ "id": "jNQXAC9IVRw",
+ "title": "Me at the zoo",
+ "uploader": "jawed",
+ "channel": "jawed",
+ "webpage_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+ "extractor_key": "Youtube",
+ "thumbnail": "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg?sqp=-oaymwEmCOADEOgC8quKqQMa8AEB-AG-AoAC8AGKAgwIABABGFUgWShlMA8=&rs=AOn4CLA9eLBatYv9WbkD4BbZ2Im-biSPTw",
+ "duration": 19,
+ "filesize_approx": 475961,
+ "formats": [
+  {
+   "format_id": "233",
+   "ext": "mp4",
+   "vcodec": "none",
+   "acodec": null,
+   "height": null
+  },
+  {
+   "format_id": "234",
+   "ext": "mp4",
+   "vcodec": "none",
+   "acodec": null,
+   "height": null
+  },
+  {
+   "format_id": "139-drc",
+   "ext": "m4a",
+   "vcodec": "none",
+   "acodec": "mp4a.40.5",
+   "height": null
+  },
+  {
+   "format_id": "249-drc",
+   "ext": "webm",
+   "vcodec": "none",
+   "acodec": "opus",
+   "height": null
+  },
+  {
+   "format_id": "250-drc",
+   "ext": "webm",
+   "vcodec": "none",
+   "acodec": "opus",
+   "height": null
+  },
+  {
+   "format_id": "139",
+   "ext": "m4a",
+   "vcodec": "none",
+   "acodec": "mp4a.40.5",
+   "height": null
+  },
+  {
+   "format_id": "249",
+   "ext": "webm",
+   "vcodec": "none",
+   "acodec": "opus",
+   "height": null
+  },
+  {
+   "format_id": "250",
+   "ext": "webm",
+   "vcodec": "none",
+   "acodec": "opus",
+   "height": null
+  },
+  {
+   "format_id": "140-drc",
+   "ext": "m4a",
+   "vcodec": "none",
+   "acodec": "mp4a.40.2",
+   "height": null
+  },
+  {
+   "format_id": "251-drc",
+   "ext": "webm",
+   "vcodec": "none",
+   "acodec": "opus",
+   "height": null
+  },
+  {
+   "format_id": "140",
+   "ext": "m4a",
+   "vcodec": "none",
+   "acodec": "mp4a.40.2",
+   "height": null
+  },
+  {
+   "format_id": "251",
+   "ext": "webm",
+   "vcodec": "none",
+   "acodec": "opus",
+   "height": null
+  },
+  {
+   "format_id": "269",
+   "ext": "mp4",
+   "vcodec": "avc1.4D400B",
+   "acodec": "none",
+   "height": 144
+  },
+  {
+   "format_id": "160",
+   "ext": "mp4",
+   "vcodec": "avc1.4D400B",
+   "acodec": "none",
+   "height": 144
+  },
+  {
+   "format_id": "602",
+   "ext": "mp4",
+   "vcodec": "vp09.00.10.08",
+   "acodec": "none",
+   "height": 144
+  },
+  {
+   "format_id": "603",
+   "ext": "mp4",
+   "vcodec": "vp09.00.11.08.01.05.01.06.00",
+   "acodec": "none",
+   "height": 144
+  },
+  {
+   "format_id": "278",
+   "ext": "webm",
+   "vcodec": "vp9",
+   "acodec": "none",
+   "height": 144
+  },
+  {
+   "format_id": "229",
+   "ext": "mp4",
+   "vcodec": "avc1.4D400C",
+   "acodec": "none",
+   "height": 240
+  },
+  {
+   "format_id": "230",
+   "ext": "mp4",
+   "vcodec": "avc1.4D400C",
+   "acodec": "none",
+   "height": 240
+  },
+  {
+   "format_id": "134",
+   "ext": "mp4",
+   "vcodec": "avc1.4D400C",
+   "acodec": "none",
+   "height": 240
+  },
+  {
+   "format_id": "133",
+   "ext": "mp4",
+   "vcodec": "avc1.4D400C",
+   "acodec": "none",
+   "height": 240
+  },
+  {
+   "format_id": "604",
+   "ext": "mp4",
+   "vcodec": "vp09.00.20.08.01.05.01.06.00",
+   "acodec": "none",
+   "height": 240
+  },
+  {
+   "format_id": "242",
+   "ext": "webm",
+   "vcodec": "vp9",
+   "acodec": "none",
+   "height": 240
+  },
+  {
+   "format_id": "395",
+   "ext": "mp4",
+   "vcodec": "av01.0.00M.08.0.110.05.01.06.0",
+   "acodec": "none",
+   "height": 240
+  }
+ ]
+}
