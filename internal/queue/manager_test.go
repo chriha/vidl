@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,6 +65,13 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 }
 
 func (f *fakeRunner) finish(url string, err error) { f.result(url) <- err }
+
+// job returns the most recent job of url.
+func (f *fakeRunner) job(url string) ytdlp.Job {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.jobs[url]
+}
 
 // overwrites reports whether the most recent run of url asked yt-dlp to
 // replace an existing file.
@@ -484,6 +492,137 @@ func TestSetConfigRaisesConcurrency(t *testing.T) {
 	cfg.Concurrency = 2
 	m.SetConfig(cfg)
 	r.waitStarted(t, "b")
+}
+
+// overrides are the per-download settings a job was run with.
+type overrides struct {
+	Template  string
+	Subtitles bool
+	Clip      ytdlp.Clip
+}
+
+func jobOverrides(j ytdlp.Job) overrides {
+	return overrides{j.Template, j.EmbedSubtitles, j.Clip}
+}
+
+// subtitleSettings returns m's settings with embed_subtitles on, so that
+// tests can tell an override from the setting in both directions.
+func subtitleSettings(m *Manager) config.Config {
+	cfg := m.Config()
+	cfg.EmbedSubtitles = true
+	return cfg
+}
+
+func TestJobUsesItemOverrides(t *testing.T) {
+	on, off := true, false
+	clip := ytdlp.Clip{Start: 90 * time.Second, End: 2 * time.Minute}
+	def := config.Default().FilenameTemplate
+	tests := []struct {
+		name string
+		req  NewItem
+		want overrides
+	}{
+		{"no overrides follow the settings", NewItem{}, overrides{def, true, ytdlp.Clip{}}},
+		{"template", NewItem{Template: "%(id)s.%(ext)s"}, overrides{"%(id)s.%(ext)s", true, ytdlp.Clip{}}},
+		{"subtitles off", NewItem{Subtitles: &off}, overrides{def, false, ytdlp.Clip{}}},
+		{"subtitles on", NewItem{Subtitles: &on}, overrides{def, true, ytdlp.Clip{}}},
+		{"clip", NewItem{Clip: clip}, overrides{def, true, clip}},
+		{"open-ended clip", NewItem{Clip: ytdlp.Clip{Start: time.Minute}}, overrides{def, true, ytdlp.Clip{Start: time.Minute}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, r := newManager(t, 1, &MemStore{})
+			m.SetConfig(subtitleSettings(m))
+			tt.req.URL = "a"
+			m.Add(tt.req)
+			r.waitStarted(t, "a")
+			if got := jobOverrides(r.job("a")); got != tt.want {
+				t.Errorf("job = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOverridesKeptAcrossPauseAndRetry(t *testing.T) {
+	on := true
+	want := overrides{"%(id)s.%(ext)s", true, ytdlp.Clip{Start: time.Second, End: time.Minute}}
+	m, r := newManager(t, 1, &MemStore{})
+	id := m.Add(NewItem{URL: "a", Template: want.Template, Subtitles: &on, Clip: want.Clip})[0]
+	r.waitStarted(t, "a")
+
+	m.Pause(id)
+	waitStatus(t, m, id, Paused)
+	m.Start(id)
+	r.waitStarted(t, "a")
+	if got := jobOverrides(r.job("a")); got != want {
+		t.Errorf("resumed job = %+v, want %+v", got, want)
+	}
+
+	r.finish("a", errors.New("HTTP Error 403"))
+	waitStatus(t, m, id, Failed)
+	m.Start(id)
+	r.waitStarted(t, "a")
+	if got := jobOverrides(r.job("a")); got != want {
+		t.Errorf("retried job = %+v, want %+v", got, want)
+	}
+}
+
+func TestOverridesSurviveRestart(t *testing.T) {
+	off := false
+	want := overrides{"%(id)s.%(ext)s", false, ytdlp.Clip{Start: 1500 * time.Millisecond}}
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	m, r := newManager(t, 1, store)
+	m.Add(NewItem{URL: "a", Template: want.Template, Subtitles: &off, Clip: want.Clip})
+	r.waitStarted(t, "a")
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	m2, r2 := newManager(t, 1, store)
+	m2.SetConfig(subtitleSettings(m2))
+	r2.waitStarted(t, "a")
+	if got := jobOverrides(r2.job("a")); got != want {
+		t.Errorf("job after restart = %+v, want %+v", got, want)
+	}
+}
+
+func TestLegacyQueueFileFollowsSettings(t *testing.T) {
+	legacy, err := os.ReadFile("testdata/queue_legacy.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "queue.json")
+	if err := os.WriteFile(path, legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := FileStore{Path: path}
+	m, r := newManager(t, 1, store)
+	cfg := subtitleSettings(m)
+	cfg.FilenameTemplate = "%(title)s.%(ext)s"
+	m.SetConfig(cfg)
+	const id = "0123456789abcdef"
+	if it, ok := m.Get(id); !ok || it.Status != Paused {
+		t.Fatalf("legacy item = %+v, %v", it, ok)
+	}
+
+	m.Start(id)
+	r.waitStarted(t, "a")
+	want := overrides{cfg.FilenameTemplate, true, ytdlp.Clip{}}
+	if got := jobOverrides(r.job("a")); got != want {
+		t.Errorf("job = %+v, want %+v", got, want)
+	}
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"clip_start", "clip_end", "template", "subtitles"} {
+		if strings.Contains(string(saved), `"`+key+`"`) {
+			t.Errorf("item without overrides saved with %q:\n%s", key, saved)
+		}
+	}
 }
 
 func equal(a, b []string) bool {

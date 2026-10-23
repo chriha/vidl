@@ -81,13 +81,16 @@ func (it Item) DisplayTitle() string {
 
 // Clip is the part of the video to download; zero for all of it.
 func (it Item) Clip() ytdlp.Clip {
-	return ytdlp.Clip{}
+	return ytdlp.Clip{Start: it.ClipStart, End: it.ClipEnd}
 }
 
 func (it *Item) clone() Item {
 	c := *it
 	c.PartFiles = slices.Clone(it.PartFiles)
 	c.Log = slices.Clone(it.Log)
+	if it.Subtitles != nil {
+		c.Subtitles = new(*it.Subtitles)
+	}
 	return c
 }
 
