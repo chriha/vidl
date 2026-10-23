@@ -61,6 +61,7 @@ type Manager struct {
 	history []*Item // finished, most recent first
 	active  map[string]context.CancelCauseFunc
 	closed  bool
+	held    bool // session only: scheduleLocked starts nothing
 	saveErr error
 	wg      sync.WaitGroup
 	changes chan struct{}
@@ -145,6 +146,18 @@ func (m *Manager) SetConfig(cfg config.Config) {
 	m.scheduleLocked()
 	m.mu.Unlock()
 	m.notify()
+}
+
+// SetHeld sets the queue-wide hold. While held, nothing starts automatically
+// (running downloads finish; Start still starts an item); releasing it fills
+// the free slots. The hold is not persisted.
+func (m *Manager) SetHeld(held bool) {
+	// stub
+}
+
+// Held reports whether the queue is held.
+func (m *Manager) Held() bool {
+	return false // stub
 }
 
 // SaveError returns the error of the most recent failed save, if any.
