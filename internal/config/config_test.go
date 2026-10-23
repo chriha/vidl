@@ -24,6 +24,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	want.Concurrency = 5
 	want.DefaultFormat = ytdlp.MKV
 	want.CookiesFromBrowser = "firefox"
+	want.Notify = false
 	if err := Save(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -48,5 +49,32 @@ func TestLoadNormalizesInvalidValues(t *testing.T) {
 	}
 	if cfg.Concurrency != MaxConcurrency || cfg.DefaultFormat != ytdlp.MP4 || cfg.DefaultResolution != "1080" {
 		t.Errorf("cfg = %+v", cfg)
+	}
+}
+
+func TestNotifyDefaultsToOn(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{name: "key missing", data: "concurrency = 2\n", want: true},
+		{name: "on", data: "notify = true\n", want: true},
+		{name: "off", data: "notify = false\n", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tt.data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Notify != tt.want {
+				t.Errorf("notify = %v, want %v", cfg.Notify, tt.want)
+			}
+		})
 	}
 }

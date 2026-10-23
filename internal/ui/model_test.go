@@ -21,7 +21,8 @@ import (
 )
 
 // fakeRunner fails URLs starting with "fail", and blocks the rest until
-// cancelled or released with finish, which writes <url>.mp4. Every run first logs fakeLogLines lines.
+// cancelled or released with finish, which writes <url>.mp4, or fails URLs
+// starting with "broken". Every run first logs fakeLogLines lines.
 type fakeRunner struct {
 	mu   sync.Mutex
 	done map[string]chan struct{}
@@ -53,6 +54,9 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	onEvent(ytdlp.Event{Kind: ytdlp.EventProgress, Progress: ytdlp.Progress{Percent: 42, Speed: 2048, ETA: time.Minute}})
 	select {
 	case <-f.ch(job.URL):
+		if strings.HasPrefix(job.URL, "broken") {
+			return errors.New("boom")
+		}
 		path := filepath.Join(job.Dir, job.URL+".mp4")
 		if err := os.WriteFile(path, []byte("video"), 0o644); err != nil {
 			return err
