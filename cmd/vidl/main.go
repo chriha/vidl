@@ -4,16 +4,19 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/chriha/vidl/internal/config"
+	"github.com/chriha/vidl/internal/ipc"
 	"github.com/chriha/vidl/internal/notify"
 	"github.com/chriha/vidl/internal/queue"
 	"github.com/chriha/vidl/internal/ui"
@@ -45,13 +48,15 @@ func main() {
 			return
 		}
 	}
-	if err := run(os.Args[1:]); err != nil {
+	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "vidl:", err)
 		os.Exit(1)
 	}
 }
 
-func run(urls []string) error {
+// run starts the UI or hands args to a running vidl; messages for the user
+// go to out.
+func run(urls []string, out io.Writer) error {
 	var missing []string
 	for _, bin := range []string{"yt-dlp", "ffmpeg"} {
 		if _, err := exec.LookPath(bin); err != nil {
@@ -92,4 +97,12 @@ func run(urls []string) error {
 	_, runErr := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version).WithNotifier(notify.System{})).Run()
 	closeErr := mgr.Close()
 	return errors.Join(runErr, closeErr)
+}
+
+// forwardToUI returns the socket handler of the running instance: it passes
+// the URLs to the UI loop through send and waits up to timeout for the count.
+func forwardToUI(send func(tea.Msg), timeout time.Duration) ipc.Handler {
+	return func(urls []string) (int, error) {
+		return 0, errors.New("not implemented")
+	}
 }
