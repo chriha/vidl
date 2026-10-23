@@ -6,7 +6,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/chriha/vidl/internal/config"
 )
+
+// LockName is the instance lock's file name, next to the queue file.
+const LockName = "queue.lock"
+
+// ErrLocked means another vidl holds the queue lock.
+var ErrLocked = errors.New("queue is locked by a running vidl")
 
 // State is everything the manager persists.
 type State struct {
@@ -58,6 +66,37 @@ func (s FileStore) Save(st State) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), s.Path)
+}
+
+// Lock is the exclusive instance lock on a queue file. The vidl that owns
+// the file holds it for its whole lifetime.
+type Lock struct {
+	f    *os.File
+	path string
+}
+
+// Lock takes the instance lock next to s.Path without waiting. It fails with
+// ErrLocked while another vidl holds it; call Release when done.
+func (s FileStore) Lock() (*Lock, error) {
+	return nil, errors.New("not implemented")
+}
+
+// LockPath is the instance lock's path, next to s.Path.
+func (s FileStore) LockPath() string {
+	return filepath.Join(filepath.Dir(s.Path), LockName)
+}
+
+// Release gives up the lock.
+func (l *Lock) Release() error {
+	return nil
+}
+
+// AppendQueued adds queued downloads to the file while no vidl is running:
+// it takes the lock, loads the file, appends and saves, keeping existing
+// items as they are. A missing format or resolution follows cfg. It fails
+// with ErrLocked while a vidl holds the lock.
+func (s FileStore) AppendQueued(cfg config.Config, reqs ...NewItem) ([]string, error) {
+	return nil, errors.New("not implemented")
 }
 
 // MemStore is an in-memory Store, useful for tests.
