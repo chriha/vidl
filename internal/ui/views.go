@@ -17,7 +17,7 @@ var statusColors = map[queue.Status]color.Color{
 	queue.Downloading: lipgloss.Color("12"),
 	queue.Paused:      lipgloss.Color("11"),
 	queue.Failed:      lipgloss.Color("9"),
-	queue.Cancelled:   lipgloss.Color("240"),
+	queue.Cancelled:   lipgloss.Color("13"),
 	queue.Finished:    lipgloss.Color("10"),
 }
 

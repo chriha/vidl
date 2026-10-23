@@ -173,8 +173,11 @@ vidl add 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
 The UI has three tabs:
 
 - **Downloads**: running downloads at the top, followed by the queue in the
-  order downloads will start.
-- **Finished**: completed downloads, most recent first.
+  order downloads will start. The tab label counts the listed downloads per
+  status, e.g. `Downloads (2/5/1)`: downloading, queued, paused, failed and
+  cancelled in that order, each in its status colour, zero counts left out.
+- **Finished**: completed downloads, most recent first. The label shows how
+  many are listed, e.g. `Finished (12)`, in green.
 - **Settings**: download preferences, editable in place (see
   [Configuration](#configuration)).
 

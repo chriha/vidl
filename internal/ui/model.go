@@ -539,6 +539,9 @@ func (m Model) tabBar() string {
 			style = activeTabStyle
 		}
 		tabs = append(tabs, style.Render(tabNames[t]))
+		if label := m.tabCountsLabel(t); label != "" {
+			tabs = append(tabs, label+" ")
+		}
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 }
