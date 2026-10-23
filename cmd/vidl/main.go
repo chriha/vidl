@@ -17,7 +17,30 @@ import (
 	"vidl/internal/ytdlp"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
+const usage = `Usage: vidl [url...]
+
+A terminal UI for downloading videos with yt-dlp. URLs given as arguments
+are added to the download queue.
+
+Options:
+  -h, --help     show this help
+  -v, --version  print the version
+`
+
 func main() {
+	if len(os.Args) == 2 {
+		switch os.Args[1] {
+		case "-h", "--help":
+			fmt.Print(usage)
+			return
+		case "-v", "--version":
+			fmt.Println("vidl", version)
+			return
+		}
+	}
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "vidl:", err)
 		os.Exit(1)

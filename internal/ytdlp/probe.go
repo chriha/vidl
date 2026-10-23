@@ -36,17 +36,17 @@ type Entry struct {
 }
 
 type rawInfo struct {
-	Type           string    `json:"_type"`
-	ID             string    `json:"id"`
-	Title          string    `json:"title"`
-	Uploader       string    `json:"uploader"`
-	Channel        string    `json:"channel"`
-	WebpageURL     string    `json:"webpage_url"`
-	URL            string    `json:"url"`
-	Extractor      string    `json:"extractor_key"`
-	Thumbnail      string    `json:"thumbnail"`
-	Duration       float64   `json:"duration"`
-	FilesizeApprox float64   `json:"filesize_approx"`
+	Type           string  `json:"_type"`
+	ID             string  `json:"id"`
+	Title          string  `json:"title"`
+	Uploader       string  `json:"uploader"`
+	Channel        string  `json:"channel"`
+	WebpageURL     string  `json:"webpage_url"`
+	URL            string  `json:"url"`
+	Extractor      string  `json:"extractor_key"`
+	Thumbnail      string  `json:"thumbnail"`
+	Duration       float64 `json:"duration"`
+	FilesizeApprox float64 `json:"filesize_approx"`
 	Formats        []struct {
 		Height float64 `json:"height"`
 		VCodec string  `json:"vcodec"`
