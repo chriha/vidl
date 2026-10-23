@@ -28,6 +28,7 @@ type Job struct {
 	CookiesFromBrowser string // e.g. "firefox", empty to disable
 	Clip               Clip   // part of the video to download; zero for all of it
 	ForceOverwrites    bool   // replace an existing file instead of skipping the download
+	SponsorBlockRemove string // comma-separated SponsorBlock categories to cut out, empty to disable
 }
 
 // Args returns the full yt-dlp argument list for the job.

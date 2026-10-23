@@ -34,6 +34,7 @@ type Config struct {
 	RateLimit          string       `toml:"rate_limit"`
 	CookiesFromBrowser string       `toml:"cookies_from_browser"`
 	Notify             bool         `toml:"notify"` // desktop notification when a download finishes or fails
+	SponsorBlockRemove string       // SponsorBlock categories to cut out, empty to disable
 }
 
 func Default() Config {
