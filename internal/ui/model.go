@@ -222,6 +222,12 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	case notifiedMsg:
 		m.handleNotified(msg.err)
 		return m, nil
+	case AddURLsMsg:
+		m.addExternal(msg)
+		return m, nil
+	case ErrorMsg:
+		m.report(msg.Err)
+		return m, nil
 	}
 	if m.dialog != nil {
 		return m.handleDialogMsg(msg)
