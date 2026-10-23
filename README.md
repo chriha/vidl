@@ -54,7 +54,9 @@ downloads resume where they stopped.
   cancelling work, opening files from the Finished tab doesn't yet.
 
 vidl checks for yt-dlp and ffmpeg at startup and exits with an install hint
-if either is missing.
+if either is missing. It also reads the yt-dlp version in the background and,
+if that release is more than 60 days old, shows a toast with the update
+commands. vidl never updates yt-dlp itself.
 
 ### Installing the dependencies
 
