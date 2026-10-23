@@ -17,6 +17,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/vidl/internal/notify"
 	"github.com/chriha/vidl/internal/queue"
 )
 
@@ -91,6 +92,7 @@ type Model struct {
 	cfgPath  string // where settings are saved
 
 	versionFn func(context.Context) (string, error) // yt-dlp version for the startup check, nil to skip
+	notifier  notify.Notifier                       // desktop notifications, nil to disable
 	now       func() time.Time
 
 	probeSeq  int                    // id of the latest probe request
@@ -113,6 +115,13 @@ func New(mgr *queue.Manager, prober Prober, cfgPath string) Model {
 // returned by fn is older than ytdlp.StaleAfter.
 func (m Model) WithVersionCheck(fn func(context.Context) (string, error)) Model {
 	m.versionFn = fn
+	return m
+}
+
+// WithNotifier makes the model send desktop notifications through n when
+// downloads finish or fail.
+func (m Model) WithNotifier(n notify.Notifier) Model {
+	m.notifier = n
 	return m
 }
 
