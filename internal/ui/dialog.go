@@ -30,6 +30,7 @@ type dialogStep int
 const (
 	stepInput dialogStep = iota
 	stepProbing
+	stepEntries // playlist checklist, before the details
 	stepDetails
 	stepBatch // several pasted URLs, queued with defaults
 )
@@ -92,6 +93,12 @@ type newDialog struct {
 	// is only offered when sponsorBlockShown.
 	sponsorBlock      bool
 	sponsorBlockShown bool
+
+	// Playlist checklist: which entries are checked, the cursor and the
+	// first visible row.
+	checked []bool
+	cursor  int
+	top     int
 
 	batch []string
 }
@@ -489,6 +496,11 @@ func cmpStr(a, b string) string {
 
 func (m Model) dialogWidth() int {
 	return min(72, max(m.width-4, 24))
+}
+
+// entriesRows is the number of entry rows the checklist shows.
+func (m Model) entriesRows() int {
+	return 0 // stub
 }
 
 func (m Model) dialogView() string {
