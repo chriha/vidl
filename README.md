@@ -18,8 +18,8 @@ downloads resume where they stopped.
   its title, uploader, duration and approximate size, pick a format and
   resolution, and queue it. Per download you can also download only a clip
   (start and end time), use a different filename template, turn embedded
-  subtitles on or off, or keep sponsor segments. Playlists queue every entry; pasting several URLs at
-  once queues them all with the default settings.
+  subtitles on or off, or keep sponsor segments. Playlists open a checklist to leave out entries before queueing;
+  pasting several URLs at once queues them all with the default settings.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
 - **Per-download progress**: percentage, speed and ETA, combined across the
@@ -210,8 +210,13 @@ audio formats ignore the resolution.
 
 These choices stay with the download across pause, retry and restarts, and
 the detail panel lists the ones that differ from the settings. For a
-playlist, `enter` queues every entry with the chosen settings; the clip fields
-are hidden there. Pasting several URLs at once offers to queue them all with the
+playlist, the dialog first lists the entries, all checked: `j`/`k` (or `↓`/`↑`)
+move, `g`/`G` jump to the first/last entry, `ctrl+d`/`ctrl+u` move half a page,
+`space` toggles the entry and moves down, and `a` checks all (or unchecks all
+when everything is checked). `enter` continues to the settings above (at least
+one entry must be checked) and queues only the checked entries in playlist
+order; `esc` goes back a step with the selection kept. The clip fields are
+hidden for playlists. Pasting several URLs at once offers to queue them all with the
 default format and resolution, without fetching details first. While the
 dialog is open, other keys are disabled; `ctrl+c` still quits.
 
