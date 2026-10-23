@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git worktree:*)",
+      "Bash(harness-resolve:*)",
+      "Bash(harness-config:*)",
+      "Bash(harness-candidates:*)",
+      "mcp__codegraph__codegraph_explore",
+      "Bash(make test:*)",
+      "Bash(make build:*)",
+      "Bash(make check:*)",
+      "Bash(make vet:*)",
+      "Bash(make fmt-check:*)",
+      "Bash(make race:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go build:*)",
+      "Bash(gofmt:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh label list:*)"
+    ]
+  }
+}
