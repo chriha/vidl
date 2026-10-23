@@ -158,6 +158,87 @@ func TestJobArgs(t *testing.T) {
 	}
 }
 
+// argValue returns the argument following flag, or false if flag is absent.
+func argValue(args []string, flag string) (string, bool) {
+	i := slices.Index(args, flag)
+	if i < 0 || i+1 >= len(args) {
+		return "", i >= 0
+	}
+	return args[i+1], true
+}
+
+func TestJobArgsPerJobOptions(t *testing.T) {
+	tests := []struct {
+		name         string
+		job          Job
+		sections     string // "" = no --download-sections
+		template     string // "" = no -o
+		subs         bool
+		subLangs     string // "" = no --sub-langs
+		forceKeyCuts bool
+	}{
+		{name: "defaults", job: Job{Format: MP4}},
+		{
+			name:         "clip with both ends",
+			job:          Job{Format: MP4, Clip: Clip{Start: 90 * time.Second, End: 2 * time.Minute}},
+			sections:     "*90-120",
+			forceKeyCuts: true,
+		},
+		{
+			name:         "clip with open start",
+			job:          Job{Format: MP4, Clip: Clip{End: 45 * time.Second}},
+			sections:     "*0-45",
+			forceKeyCuts: true,
+		},
+		{
+			name:         "clip with open end",
+			job:          Job{Format: MP4, Clip: Clip{Start: time.Hour + 500*time.Millisecond}},
+			sections:     "*3600.5-inf",
+			forceKeyCuts: true,
+		},
+		{
+			name:         "clip on audio",
+			job:          Job{Format: MP3, Clip: Clip{Start: 10 * time.Second, End: 20 * time.Second}},
+			sections:     "*10-20",
+			forceKeyCuts: true,
+		},
+		{name: "template", job: Job{Format: MP4, Template: "%(id)s.%(ext)s"}, template: "%(id)s.%(ext)s"},
+		{name: "subtitles with langs", job: Job{Format: MKV, EmbedSubtitles: true, SubtitleLangs: "de,en"}, subs: true, subLangs: "de,en"},
+		{name: "subtitles without langs", job: Job{Format: MKV, EmbedSubtitles: true}, subs: true},
+		{name: "subtitles off ignores langs", job: Job{Format: MKV, SubtitleLangs: "de"}},
+		{name: "subtitles skipped for audio", job: Job{Format: M4A, EmbedSubtitles: true, SubtitleLangs: "en"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.job.URL, tt.job.Dir = "https://example.com/v", "/dl"
+			args := tt.job.Args()
+			if args[len(args)-2] != "--" || args[len(args)-1] != tt.job.URL {
+				t.Fatalf("URL must come last after --: %v", args)
+			}
+			opts := args[:len(args)-2]
+
+			got, ok := argValue(opts, "--download-sections")
+			if ok != (tt.sections != "") || got != tt.sections {
+				t.Errorf("--download-sections = %q (present %v), want %q", got, ok, tt.sections)
+			}
+			if has := slices.Contains(opts, "--force-keyframes-at-cuts"); has != tt.forceKeyCuts {
+				t.Errorf("--force-keyframes-at-cuts present = %v, want %v", has, tt.forceKeyCuts)
+			}
+			got, ok = argValue(opts, "-o")
+			if ok != (tt.template != "") || got != tt.template {
+				t.Errorf("-o = %q (present %v), want %q", got, ok, tt.template)
+			}
+			if has := slices.Contains(opts, "--embed-subs"); has != tt.subs {
+				t.Errorf("--embed-subs present = %v, want %v", has, tt.subs)
+			}
+			got, ok = argValue(opts, "--sub-langs")
+			if ok != (tt.subLangs != "") || got != tt.subLangs {
+				t.Errorf("--sub-langs = %q (present %v), want %q", got, ok, tt.subLangs)
+			}
+		})
+	}
+}
+
 // fakeYtdlp writes a shell script standing in for yt-dlp.
 func fakeYtdlp(t *testing.T, body string) Runner {
 	t.Helper()

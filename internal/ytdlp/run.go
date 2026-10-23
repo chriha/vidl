@@ -26,6 +26,7 @@ type Job struct {
 	EmbedMetadata      bool
 	RateLimit          string // e.g. "5M", empty for unlimited
 	CookiesFromBrowser string // e.g. "firefox", empty to disable
+	Clip               Clip   // part of the video to download; zero for all of it
 }
 
 // Args returns the full yt-dlp argument list for the job.
@@ -43,6 +44,9 @@ func (j Job) Args() []string {
 		args = append(args, "-o", j.Template)
 	}
 	args = append(args, FormatArgs(j.Format, j.Resolution)...)
+	if !j.Clip.IsZero() {
+		args = append(args, "--download-sections", j.Clip.sectionArg(), "--force-keyframes-at-cuts")
+	}
 	if j.EmbedSubtitles && !j.Format.IsAudio() {
 		args = append(args, "--embed-subs")
 		if j.SubtitleLangs != "" {
