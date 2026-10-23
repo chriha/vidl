@@ -414,10 +414,7 @@ func (d *newDialog) detailsLines(w int) []string {
 	}
 	resLabels := make([]string, len(d.resolutions))
 	for i, r := range d.resolutions {
-		resLabels[i] = r
-		if r != "best" {
-			resLabels[i] += "p"
-		}
+		resLabels[i] = resolutionName(r)
 	}
 	lines = append(lines, "",
 		ansi.Truncate(selector("Type", formats, d.format, d.focus == focusFormat, false), w, "…"),

@@ -213,13 +213,18 @@ func progressLabel(it queue.Item) string {
 
 // resolutionLabel is the item's resolution ("1080p", "best"), or "" for audio.
 func resolutionLabel(it queue.Item) string {
-	switch {
-	case it.Format.IsAudio() || it.Resolution == "":
+	if it.Format.IsAudio() || it.Resolution == "" {
 		return ""
-	case it.Resolution == "best":
-		return it.Resolution
 	}
-	return it.Resolution + "p"
+	return resolutionName(it.Resolution)
+}
+
+// resolutionName labels a resolution value: "1080p", or "best".
+func resolutionName(r string) string {
+	if r == "best" {
+		return r
+	}
+	return r + "p"
 }
 
 func durationLabel(seconds float64) string {

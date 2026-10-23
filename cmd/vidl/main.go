@@ -85,7 +85,7 @@ func run(urls []string) error {
 	}
 	mgr.Add(reqs...)
 
-	_, runErr := tea.NewProgram(ui.New(mgr, runner)).Run()
+	_, runErr := tea.NewProgram(ui.New(mgr, runner, cfgPath)).Run()
 	closeErr := mgr.Close()
 	return errors.Join(runErr, closeErr)
 }

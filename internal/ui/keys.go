@@ -11,6 +11,8 @@ type keyMap struct {
 	Retry, Remove, New       key.Binding
 	Detail, Close            key.Binding
 	MoveUp, MoveDown         key.Binding
+	Edit, Toggle             key.Binding
+	Decrease, Increase       key.Binding
 	Help, Quit               key.Binding
 }
 
@@ -37,6 +39,10 @@ func newKeyMap() keyMap {
 		MoveDown:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "move down")),
 		Detail:       key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details")),
 		Close:        key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close details")),
+		Edit:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit")),
+		Toggle:       key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
+		Decrease:     key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/←", "decrease")),
+		Increase:     key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l/→", "increase")),
 		Help:         key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:         key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}
@@ -63,6 +69,8 @@ func (k tabKeys) ShortHelp() []key.Binding {
 		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.NextTab, k.Help, k.Quit}
 	case tabFinished:
 		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Remove, k.NextTab, k.Help, k.Quit}
+	case tabSettings:
+		return []key.Binding{k.Up, k.Down, k.Edit, k.Decrease, k.Increase, k.NextTab, k.Help, k.Quit}
 	}
 	return []key.Binding{k.New, k.NextTab, k.Help, k.Quit}
 }
@@ -76,6 +84,8 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 		return [][]key.Binding{nav, {k.Detail, k.Close}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
 		return [][]key.Binding{nav, {k.Detail, k.Close, k.Remove}, tabs, general}
+	case tabSettings:
+		return [][]key.Binding{{k.Up, k.Down, k.Top, k.Bottom}, {k.Edit, k.Toggle, k.Decrease, k.Increase}, {k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3}, general}
 	}
 	return [][]key.Binding{tabs, general}
 }

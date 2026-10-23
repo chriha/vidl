@@ -11,8 +11,8 @@ downloads resume where they stopped.
 
 > **Status:** early development. The download engine, queue, persistence and
 > configuration are complete and tested, and so are the Downloads and Finished
-> tables, the detail panel and the new-download dialog; the settings editor is
-> in progress.
+> tables, the detail panel, the new-download dialog and the settings tab;
+> search, opening files and the status footer are in progress.
 > See [Roadmap](#roadmap) for what works today.
 
 ## Features
@@ -116,7 +116,8 @@ The UI has three tabs:
 - **Downloads**: running downloads at the top, followed by the queue in the
   order downloads will start.
 - **Finished**: completed downloads, most recent first.
-- **Settings**: download preferences.
+- **Settings**: download preferences, editable in place (see
+  [Configuration](#configuration)).
 
 Press `n` to add a download. If the clipboard holds a URL, it's already
 filled in; otherwise paste or type one and press `enter` to fetch its details.
@@ -157,12 +158,23 @@ automatically the next time you start vidl.
 | `?`                   | Toggle full help                               | ✅      |
 | `q` / `ctrl+c`        | Quit                                           | ✅      |
 
+On the Settings tab, `j`/`k` move between settings, `h`/`l` (or `←`/`→`)
+change the concurrency and cycle through choices, `space` or `enter` toggles
+on/off settings, and `enter` edits text settings (`enter` saves, `esc`
+cancels). `tab`/`shift+tab` and `1` `2` `3` still switch tabs.
+
 ## Configuration
 
 Settings are stored in `~/.config/vidl/config.toml` (or
 `$XDG_CONFIG_HOME/vidl/config.toml`). The file is created with the defaults
-on first start; edit it while vidl is not running. Invalid values fall back
-to their defaults.
+on first start. Change settings on the Settings tab, which saves every change
+immediately, or edit the file while vidl is not running (vidl overwrites it
+when you change a setting). Invalid values fall back to their defaults.
+
+The Settings tab checks values as you enter them: the download folder must be
+an absolute path or start with `~`, and vidl offers to create it if it doesn't
+exist; the rate limit must be a number with an optional `K`, `M` or `G`
+suffix.
 
 ```toml
 download_dir = "~/Downloads"
@@ -318,7 +330,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Detail panel (`enter`)
 - [x] New-download dialog with format and resolution selection, playlist
       expansion and multi-URL paste
-- [ ] Settings tab
+- [x] Settings tab
 - [ ] Open file, clear history, global speed footer, search
 
 ## License

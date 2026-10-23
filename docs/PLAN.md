@@ -1,8 +1,8 @@
 # vidl implementation plan
 
-Handoff document for continuing development. Milestones 1–6 are done;
+Handoff document for continuing development. Milestones 1–7 are done;
 this file describes what was decided, what exists, what was learned the hard
-way, and what remains (milestones 7–8) in enough detail to proceed without
+way, and what remains (milestone 8) in enough detail to proceed without
 the original conversation.
 
 Read `README.md` first for the user-facing picture, then this file.
@@ -102,6 +102,7 @@ internal/ui/           Bubble Tea root model
   table.go, views.go   Downloads/Finished tables
   detail.go            detail panel
   dialog.go            new-download dialog, Prober interface
+  settings.go          Settings tab: field table, inline editing, validation
 ```
 
 ### `ytdlp` package
@@ -182,6 +183,16 @@ plus a batch step for multi-URL pastes. `ui.New(mgr, prober)` takes a
 the clipboard via `atotto/clipboard` (already a dependency of
 `bubbles/textinput`) and is replaced in tests.
 
+`settings.go` is the Settings tab. `settings` is a table of every
+`config.Config` field with string `get`/`set` closures and a kind (text, int,
+enum, bool), so navigation, editing and rendering are generic. On that tab
+`handleSettingsKey` runs before the global keys and takes `h`/`l` (otherwise
+tab switching) and `enter`; while a text editor or the "create folder?"
+prompt is open it takes every key except `ctrl+c`. `applySetting` normalizes,
+calls `mgr.SetConfig` and then `config.Save(cfgPath)`; save errors go to
+`m.err`, validation errors stay inline under the form. `ui.New(mgr, prober,
+cfgPath)`.
+
 ## Lessons learned (don't rediscover these)
 
 - **yt-dlp writes postprocess progress to stderr** and download progress to
@@ -244,7 +255,7 @@ the clipboard via `atotto/clipboard` (already a dependency of
 
 ## Remaining milestones
 
-Suggested order: 4 → 5 → 6 → 7 → 8 (4, 5 and 6 are done). Each should be usable on its own.
+Suggested order: 4 → 5 → 6 → 7 → 8 (4–7 are done). Each should be usable on its own.
 
 ### Milestone 4: Downloads and Finished tables
 

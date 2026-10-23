@@ -67,16 +67,19 @@ type Model struct {
 	dialog  *newDialog     // new-download dialog, nil when closed
 	err     error
 
+	settings settingsForm
+	cfgPath  string // where settings are saved
+
 	probeSeq  int                    // id of the latest probe request
 	clipboard func() (string, error) // reads the system clipboard
 }
 
 // New returns the root model for mgr; prober fetches metadata in the
-// new-download dialog.
-func New(mgr *queue.Manager, prober Prober) Model {
+// new-download dialog, and settings changes are saved to cfgPath.
+func New(mgr *queue.Manager, prober Prober, cfgPath string) Model {
 	m := Model{
 		mgr: mgr, prober: prober, keys: newKeyMap(), help: help.New(), log: viewport.New(),
-		clipboard: clipboard.ReadAll,
+		clipboard: clipboard.ReadAll, cfgPath: cfgPath,
 	}
 	m.log.SoftWrap = true
 	m.refresh()
@@ -128,6 +131,9 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.dialog != nil {
 			m.dialog.input.SetWidth(m.dialogWidth() - 8)
 		}
+		if m.settings.edit != nil {
+			m.settings.edit.SetWidth(m.settingValueWidth() - 1)
+		}
 		m.scroll()
 		return m, nil
 	case changedMsg:
@@ -142,10 +148,21 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.confirm != nil {
 			return m.handleConfirmKey(msg)
 		}
+		if m.tab == tabSettings {
+			if next, cmd, ok := m.handleSettingsKey(msg); ok {
+				return next, cmd
+			}
+		}
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
 		m.scroll()
 		return m, cmd
+	default:
+		if m.settings.edit != nil { // paste and cursor blink
+			var cmd tea.Cmd
+			*m.settings.edit, cmd = m.settings.edit.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -358,7 +375,7 @@ func (m Model) render() string {
 	case tabFinished:
 		body = m.tableView(finishedColumns, finishedCells, "Nothing finished yet.")
 	case tabSettings:
-		body = dimStyle.Render("Settings coming soon.")
+		body = m.settingsView(bodyHeight)
 	}
 	if panel := m.detailView(); panel != "" {
 		tableH := bodyHeight - m.detailHeight()

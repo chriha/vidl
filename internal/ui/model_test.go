@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -72,7 +73,7 @@ func newTestModel(t *testing.T, concurrency int, urls ...string) (Model, *queue.
 		reqs = append(reqs, queue.NewItem{URL: u, Title: u})
 	}
 	mgr.Add(reqs...)
-	m := New(mgr, &fakeProber{})
+	m := New(mgr, &fakeProber{}, filepath.Join(t.TempDir(), "config.toml"))
 	m.clipboard = func() (string, error) { return "", errors.New("no clipboard") }
 	m = update(t, m, tea.WindowSizeMsg{Width: 100, Height: 12})
 	return m, mgr, r
@@ -95,6 +96,8 @@ func press(t *testing.T, m Model, keys ...string) Model {
 			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
 		case "tab":
 			msg = tea.KeyPressMsg{Code: tea.KeyTab}
+		case "space":
+			msg = tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 		case "ctrl+d", "ctrl+u":
 			msg = tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 		default:
