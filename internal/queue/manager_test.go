@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,6 +65,13 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 }
 
 func (f *fakeRunner) finish(url string, err error) { f.result(url) <- err }
+
+// job returns the most recent job of url.
+func (f *fakeRunner) job(url string) ytdlp.Job {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.jobs[url]
+}
 
 // overwrites reports whether the most recent run of url asked yt-dlp to
 // replace an existing file.
@@ -214,6 +222,85 @@ func TestPauseAndResumeKeepsPartFiles(t *testing.T) {
 	r.waitStarted(t, "a")
 	if status(m, ids[0]) != Downloading || status(m, ids[1]) != Downloading {
 		t.Errorf("statuses = %v, %v", status(m, ids[0]), status(m, ids[1]))
+	}
+}
+
+func TestRequeueWaitsForFreeSlotAtItsPosition(t *testing.T) {
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	m, r := newManager(t, 1, store)
+	ids := add(m, "a", "b", "c")
+	r.waitStarted(t, "a")
+	m.Pause(ids[1])
+
+	if err := m.Requeue(ids[1]); err != nil {
+		t.Fatal(err)
+	}
+	if status(m, ids[1]) != Queued {
+		t.Fatalf("b = %v, want queued", status(m, ids[1]))
+	}
+	r.assertNoStart(t) // the only slot is still taken
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Queue[1].ID != ids[1] || st.Queue[1].Status != Queued {
+		t.Errorf("saved queue[1] = %s %v, want %s queued", st.Queue[1].ID, st.Queue[1].Status, ids[1])
+	}
+
+	r.finish("a", nil)
+	r.waitStarted(t, "b") // b kept its place ahead of c
+	r.assertNoStart(t)
+}
+
+func TestRequeueStartsWhenSlotFree(t *testing.T) {
+	m, r := newManager(t, 1, &MemStore{})
+	id := add(m, "a")[0]
+	r.waitStarted(t, "a")
+	m.Pause(id)
+	waitStatus(t, m, id, Paused)
+
+	if err := m.Requeue(id); err != nil {
+		t.Fatal(err)
+	}
+	r.waitStarted(t, "a")
+	waitStatus(t, m, id, Downloading)
+}
+
+func TestRequeueLeavesOtherStatusesAlone(t *testing.T) {
+	m, r := newManager(t, 1, &MemStore{})
+	finished, _ := finishedItem(t, m, r, "done")
+	ids := add(m, "run", "wait", "fail", "cancel")
+	r.waitStarted(t, "run")
+	m.Start(ids[2])
+	r.waitStarted(t, "fail")
+	r.finish("fail", errors.New("boom"))
+	waitStatus(t, m, ids[2], Failed)
+	m.Cancel(ids[3])
+
+	for _, tc := range []struct {
+		name string
+		id   string
+		want Status
+	}{
+		{"downloading", ids[0], Downloading},
+		{"queued", ids[1], Queued},
+		{"failed", ids[2], Failed},
+		{"cancelled", ids[3], Cancelled},
+		{"finished", finished, Finished},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := m.Requeue(tc.id); err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if got := status(m, tc.id); got != tc.want {
+				t.Errorf("status = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	r.assertNoStart(t)
+
+	if err := m.Requeue("nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown id: err = %v, want ErrNotFound", err)
 	}
 }
 
@@ -369,12 +456,7 @@ func TestEstimatedSizePersists(t *testing.T) {
 }
 
 func TestLoadWithoutEstimatedSize(t *testing.T) {
-	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
-	legacy := `{"queue":[{"id":"a","url":"a","format":"mp4","resolution":"1080","status":"queued","progress":{},"added_at":"2026-10-23T12:00:00Z"}],"history":[]}`
-	if err := os.WriteFile(store.Path, []byte(legacy), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err := store.Load()
+	got, err := FileStore{Path: "testdata/queue_legacy.json"}.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,6 +596,137 @@ func TestSetConfigRaisesConcurrency(t *testing.T) {
 	cfg.Concurrency = 2
 	m.SetConfig(cfg)
 	r.waitStarted(t, "b")
+}
+
+// overrides are the per-download settings a job was run with.
+type overrides struct {
+	Template  string
+	Subtitles bool
+	Clip      ytdlp.Clip
+}
+
+func jobOverrides(j ytdlp.Job) overrides {
+	return overrides{j.Template, j.EmbedSubtitles, j.Clip}
+}
+
+// subtitleSettings returns m's settings with embed_subtitles on, so that
+// tests can tell an override from the setting in both directions.
+func subtitleSettings(m *Manager) config.Config {
+	cfg := m.Config()
+	cfg.EmbedSubtitles = true
+	return cfg
+}
+
+func TestJobUsesItemOverrides(t *testing.T) {
+	on, off := true, false
+	clip := ytdlp.Clip{Start: 90 * time.Second, End: 2 * time.Minute}
+	def := config.Default().FilenameTemplate
+	tests := []struct {
+		name string
+		req  NewItem
+		want overrides
+	}{
+		{"no overrides follow the settings", NewItem{}, overrides{def, true, ytdlp.Clip{}}},
+		{"template", NewItem{Template: "%(id)s.%(ext)s"}, overrides{"%(id)s.%(ext)s", true, ytdlp.Clip{}}},
+		{"subtitles off", NewItem{Subtitles: &off}, overrides{def, false, ytdlp.Clip{}}},
+		{"subtitles on", NewItem{Subtitles: &on}, overrides{def, true, ytdlp.Clip{}}},
+		{"clip", NewItem{Clip: clip}, overrides{def, true, clip}},
+		{"open-ended clip", NewItem{Clip: ytdlp.Clip{Start: time.Minute}}, overrides{def, true, ytdlp.Clip{Start: time.Minute}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, r := newManager(t, 1, &MemStore{})
+			m.SetConfig(subtitleSettings(m))
+			tt.req.URL = "a"
+			m.Add(tt.req)
+			r.waitStarted(t, "a")
+			if got := jobOverrides(r.job("a")); got != tt.want {
+				t.Errorf("job = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOverridesKeptAcrossPauseAndRetry(t *testing.T) {
+	on := true
+	want := overrides{"%(id)s.%(ext)s", true, ytdlp.Clip{Start: time.Second, End: time.Minute}}
+	m, r := newManager(t, 1, &MemStore{})
+	id := m.Add(NewItem{URL: "a", Template: want.Template, Subtitles: &on, Clip: want.Clip})[0]
+	r.waitStarted(t, "a")
+
+	m.Pause(id)
+	waitStatus(t, m, id, Paused)
+	m.Start(id)
+	r.waitStarted(t, "a")
+	if got := jobOverrides(r.job("a")); got != want {
+		t.Errorf("resumed job = %+v, want %+v", got, want)
+	}
+
+	r.finish("a", errors.New("HTTP Error 403"))
+	waitStatus(t, m, id, Failed)
+	m.Start(id)
+	r.waitStarted(t, "a")
+	if got := jobOverrides(r.job("a")); got != want {
+		t.Errorf("retried job = %+v, want %+v", got, want)
+	}
+}
+
+func TestOverridesSurviveRestart(t *testing.T) {
+	off := false
+	want := overrides{"%(id)s.%(ext)s", false, ytdlp.Clip{Start: 1500 * time.Millisecond}}
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	m, r := newManager(t, 1, store)
+	m.Add(NewItem{URL: "a", Template: want.Template, Subtitles: &off, Clip: want.Clip})
+	r.waitStarted(t, "a")
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	m2, r2 := newManager(t, 1, store)
+	m2.SetConfig(subtitleSettings(m2))
+	r2.waitStarted(t, "a")
+	if got := jobOverrides(r2.job("a")); got != want {
+		t.Errorf("job after restart = %+v, want %+v", got, want)
+	}
+}
+
+func TestLegacyQueueFileFollowsSettings(t *testing.T) {
+	legacy, err := os.ReadFile("testdata/queue_legacy.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "queue.json")
+	if err := os.WriteFile(path, legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := FileStore{Path: path}
+	m, r := newManager(t, 1, store)
+	cfg := subtitleSettings(m)
+	cfg.FilenameTemplate = "%(title)s.%(ext)s"
+	m.SetConfig(cfg)
+	const id = "0123456789abcdef"
+	if it, ok := m.Get(id); !ok || it.Status != Paused {
+		t.Fatalf("legacy item = %+v, %v", it, ok)
+	}
+
+	m.Start(id)
+	r.waitStarted(t, "a")
+	want := overrides{cfg.FilenameTemplate, true, ytdlp.Clip{}}
+	if got := jobOverrides(r.job("a")); got != want {
+		t.Errorf("job = %+v, want %+v", got, want)
+	}
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"clip_start", "clip_end", "template", "subtitles"} {
+		if strings.Contains(string(saved), `"`+key+`"`) {
+			t.Errorf("item without overrides saved with %q:\n%s", key, saved)
+		}
+	}
 }
 
 func equal(a, b []string) bool {

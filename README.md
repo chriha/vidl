@@ -16,15 +16,19 @@ downloads resume where they stopped.
 
 - **New-download dialog**: paste a URL (prefilled from the clipboard), see
   its title, uploader, duration and approximate size, pick a format and
-  resolution, and queue it. Playlists queue every entry; pasting several URLs
-  at once queues them all with the default settings.
+  resolution, and queue it. Per download you can also download only a clip
+  (start and end time), use a different filename template, or turn embedded
+  subtitles on or off. Playlists queue every entry; pasting several URLs at
+  once queues them all with the default settings.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
 - **Per-download progress**: percentage, speed and ETA, combined across the
   separate video and audio streams yt-dlp fetches before merging.
 - **Pause, resume, cancel and retry.** Pausing keeps partial files so the
-  download resumes; cancelling deletes them. `R` on a finished download
-  downloads it again and replaces the file.
+  download resumes; `p` on a paused download puts it back in the queue to
+  wait for a free slot, while `s` resumes it at once. Cancelling deletes
+  partial files. `R` on a finished download downloads it again and
+  replaces the file.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads: open a file or show it in
   its folder, and clear the history.
@@ -32,9 +36,12 @@ downloads resume where they stopped.
   filter for the queue.
 - **Status line** with the total speed and the number of downloads per
   status, and the overall progress in the terminal's window title.
-- **Detail panel** for any download: source, format, progress per stream,
-  timestamps, output and partial files, errors, and yt-dlp's latest output
+- **Detail panel** for any download: source, format, clip, template and
+  subtitle overrides, progress per stream, timestamps, output and partial
+  files, errors, and yt-dlp's latest output
   for running or failed downloads.
+- **Desktop notifications** when a download finishes or fails. Downloads
+  ending within about two seconds of each other share one notification.
 - **Persistence**: queue and history are saved on every change; downloads
   running when you quit are resumed on the next start.
 - **Output formats**: mp4, mkv, webm (video) and mp3, m4a, opus (audio only),
@@ -152,11 +159,26 @@ The UI has three tabs:
 
 Press `n` to add a download. If the clipboard holds a URL, it's already
 filled in; otherwise paste or type one and press `enter` to fetch its details.
-Choose the file type and resolution with `tab`/`j`/`k` (field) and `h`/`l`
-(value), then press `enter` to queue it, or `esc` to go back and edit the URL.
-Resolutions above the video's best are hidden, and audio formats ignore the
-resolution. For a playlist, `enter` queues every entry with the chosen
-settings. Pasting several URLs at once offers to queue them all with the
+Move between the fields with `tab`/`shift+tab` or `↑`/`↓` (`j`/`k` outside
+text fields), change the file type, resolution and subtitles with `h`/`l`,
+and type into the text fields. Then press `enter` to queue it, or `esc` to go
+back and edit the URL. Resolutions above the video's best are hidden, and
+audio formats ignore the resolution.
+
+- **Clip start / end** download only part of the video. Times are
+  `[[h:]m:]s`, e.g. `90`, `1:30` or `1:02:03`; leave start empty to begin at
+  the start and end empty to go to the end. The end must be after the start,
+  otherwise the dialog shows an error and doesn't queue. Clips are cut by
+  ffmpeg, so a paused clip starts over when resumed.
+- **Template** is the filename template for this download, prefilled with
+  the setting; empty or unchanged follows the setting.
+- **Subtitles** embeds subtitles for this download, defaulting to the
+  setting.
+
+These choices stay with the download across pause, retry and restarts, and
+the detail panel lists the ones that differ from the settings. For a
+playlist, `enter` queues every entry with the chosen settings; the clip fields
+are hidden there. Pasting several URLs at once offers to queue them all with the
 default format and resolution, without fetching details first. While the
 dialog is open, other keys are disabled; `ctrl+c` still quits.
 
@@ -180,10 +202,22 @@ show a `▌` at their left edge and the status line counts them, e.g.
 when a download leaves the tab. `esc` clears the marks after closing the
 detail panel and before clearing the filters.
 
+While downloads are marked, `s`, `p`, `c`, `R` and `r` act on all marked
+downloads (including those a filter hides) instead of the selected one.
+Downloads whose state doesn't allow the action are skipped, and a message
+sums up the result, e.g. `paused 3 · skipped 1`; if any of them fails, the
+message counts the failures and shows the first error. `r` asks once for all
+marked downloads. On the Finished tab only `r` uses the marks; `u`, `d`,
+`enter`, `o`, `O` and `b` always act on the selected download.
+
 On the Finished tab, `o` opens a file with its default application and `O`
 shows it in Finder (macOS), selects it in Explorer (Windows) or opens its
 folder (Linux). Removing downloads
 from the history never deletes their files.
+
+`b` opens the selected download's source URL in the default browser, on the
+Downloads and Finished tabs and for downloads in any state. Only `http` and
+`https` URLs are opened, and marks are ignored.
 
 The line above the help shows the total download speed and how many downloads
 are running, queued, paused, failed or cancelled. Short messages and errors
@@ -208,19 +242,20 @@ automatically the next time you start vidl.
 | `shift+tab` / `h`     | Previous tab                                        |
 | `1` `2` `3`           | Go to Downloads / Finished / Settings               |
 | `s`                   | Start or resume; retries failed or cancelled        |
-| `p`                   | Pause                                               |
+| `p`                   | Pause, or put a paused download back in the queue   |
 | `c`                   | Cancel (deletes partial files)                      |
 | `R`                   | Retry failed or cancelled, or re-download finished  |
 | `u` / `d`             | Move queued download up / down                      |
 | `r`                   | Remove (asks for confirmation)                      |
 | `enter`               | Toggle the detail panel                             |
-| `space`               | Mark or unmark the download and move down           |
+| `space`               | Mark or unmark the download (actions apply to all)  |
 | `V`                   | Mark all visible downloads, or unmark them all      |
 | `esc`                 | Close the detail panel, then clear marks, filters   |
 | `/`                   | Search the current tab by title or URL              |
 | `f`                   | Cycle the status filter (Downloads tab)             |
 | `o`                   | Open the file (Finished tab)                        |
 | `O`                   | Show the file in its folder (Finished tab)          |
+| `b`                   | Open the source URL in the browser                  |
 | `X`                   | Clear finished history (asks for confirmation)      |
 | `n`                   | New download                                        |
 | `?`                   | Toggle full help                                    |
@@ -256,6 +291,7 @@ embed_thumbnail = false
 embed_metadata = true
 rate_limit = ""
 cookies_from_browser = ""
+notify = true
 ```
 
 | Key                    | Default                       | Description |
@@ -271,9 +307,19 @@ cookies_from_browser = ""
 | `embed_metadata`       | `true`                        | Write title, uploader, date, etc. into the file. |
 | `rate_limit`           | empty (unlimited)             | Maximum download rate per download, e.g. `500K` or `5M`. |
 | `cookies_from_browser` | empty (disabled)              | Use cookies from `brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari` or `vivaldi`, for private, members-only or age-restricted videos. |
+| `notify`               | `true`                        | Desktop notification when a download finishes or fails. |
 
 Changing settings affects downloads that start afterwards; running downloads
-keep the settings they started with.
+keep the settings they started with. `notify` applies at once.
+
+### Notifications
+
+vidl notifies through `osascript` on macOS, `notify-send` on Linux (in the
+`libnotify-bin` or `libnotify` package) and PowerShell's built-in toast API on Windows.
+If the notifier isn't installed, vidl says so once and doesn't try again
+until the next start. macOS may ask you to allow notifications for your
+terminal app the first time. Windows notifications are best-effort: they
+appear under PowerShell's name and are only tested by hand on macOS.
 
 ### Formats and resolutions
 
@@ -426,6 +472,10 @@ directly to see whether the problem is the site or vidl.
 - [x] Status filter on the Downloads tab (`f`)
 - [x] Open files from the Finished tab on Windows
 - [x] Re-download finished videos (`R`)
+- [x] Desktop notifications for finished and failed downloads
+- [x] Per-download clip range, filename template and subtitles
+- [x] Mark several downloads (`space`, `V`) and start, pause, cancel, retry
+      or remove them together
 
 ## License
 

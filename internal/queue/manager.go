@@ -39,6 +39,11 @@ type NewItem struct {
 	Extractor  string
 	Format     ytdlp.Format
 	Resolution string
+
+	// Optional overrides of the settings; zero values follow the settings.
+	Clip      ytdlp.Clip // single videos only
+	Template  string     // filename template
+	Subtitles *bool      // embed subtitles
 }
 
 // Manager owns the download queue and history. Queued items start
@@ -164,6 +169,12 @@ func (m *Manager) Add(reqs ...NewItem) []string {
 			Resolution: r.Resolution,
 			Status:     Queued,
 			AddedAt:    time.Now(),
+			ClipStart:  r.Clip.Start,
+			ClipEnd:    r.Clip.End,
+			Template:   r.Template,
+		}
+		if r.Subtitles != nil {
+			it.Subtitles = new(*r.Subtitles)
 		}
 		if !it.Format.Valid() {
 			it.Format = m.cfg.DefaultFormat
@@ -212,6 +223,28 @@ func (m *Manager) Start(id string) error {
 // be resumed with Start.
 func (m *Manager) Pause(id string) error {
 	return m.stop(id, errPaused, Paused)
+}
+
+// Requeue puts a paused download back in the queue at its position, so it
+// starts once a slot is free. Downloads in any other status are left alone.
+func (m *Manager) Requeue(id string) error {
+	m.mu.Lock()
+	defer m.notify()
+	defer m.mu.Unlock()
+	it := m.findQueuedLocked(id)
+	if it == nil {
+		if slices.ContainsFunc(m.history, byID(id)) {
+			return nil
+		}
+		return ErrNotFound
+	}
+	if it.Status != Paused {
+		return nil
+	}
+	it.Status = Queued
+	m.scheduleLocked()
+	m.saveLocked()
+	return nil
 }
 
 // Cancel stops a running or queued download and deletes its partial files.
@@ -382,18 +415,27 @@ func (m *Manager) startLocked(it *Item) {
 
 func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 	c := m.cfg
+	template := c.FilenameTemplate
+	if it.Template != "" {
+		template = it.Template
+	}
+	subtitles := c.EmbedSubtitles
+	if it.Subtitles != nil {
+		subtitles = *it.Subtitles
+	}
 	return ytdlp.Job{
 		URL:                it.URL,
 		Dir:                c.DownloadPath(),
-		Template:           c.FilenameTemplate,
+		Template:           template,
 		Format:             it.Format,
 		Resolution:         it.Resolution,
-		EmbedSubtitles:     c.EmbedSubtitles,
+		EmbedSubtitles:     subtitles,
 		SubtitleLangs:      c.SubtitleLangs,
 		EmbedThumbnail:     c.EmbedThumbnail,
 		EmbedMetadata:      c.EmbedMetadata,
 		RateLimit:          c.RateLimit,
 		CookiesFromBrowser: c.CookiesFromBrowser,
+		Clip:               it.Clip(),
 		ForceOverwrites:    it.redownload(),
 	}
 }

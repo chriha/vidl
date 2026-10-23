@@ -1,12 +1,18 @@
 package ui
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/key"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chriha/vidl/internal/queue"
 )
 
 // markedURLs returns the URLs of the marked items on tab t, in list order.
@@ -178,5 +184,181 @@ func TestMarkHelp(t *testing.T) {
 	k := tabKeys{keyMap: keys, tab: tabDownloads, marked: true}
 	if !slices.ContainsFunc(k.escKeys(), func(b key.Binding) bool { return b.Help().Desc == "clear marks" }) {
 		t.Error("esc help doesn't mention clearing marks while rows are marked")
+	}
+}
+
+// markURLs marks the downloads with the given URLs on the current tab.
+func markURLs(t *testing.T, m Model, urls ...string) Model {
+	t.Helper()
+	for _, u := range urls {
+		m = press(t, selectURL(t, m, u), "space")
+	}
+	return m
+}
+
+// statusOf returns the current status of the download with url.
+func statusOf(t *testing.T, mgr *queue.Manager, url string) queue.Status {
+	t.Helper()
+	q, h := mgr.Snapshot()
+	for _, it := range slices.Concat(q, h) {
+		if it.URL == url {
+			return it.Status
+		}
+	}
+	t.Fatalf("%q not found", url)
+	return 0
+}
+
+// newBulkModel returns a model whose downloads a and c are running, fail-b
+// failed, d is paused, e queued and f cancelled.
+func newBulkModel(t *testing.T) (Model, *queue.Manager) {
+	t.Helper()
+	m, mgr, _ := newTestModel(t, 2, "a", "fail-b", "c", "d", "e", "f")
+	waitFor(t, "fail-b failed and c running", func() bool {
+		return statusOf(t, mgr, "fail-b") == queue.Failed && statusOf(t, mgr, "c") == queue.Downloading
+	})
+	q, _ := mgr.Snapshot()
+	for _, it := range q {
+		var err error
+		switch it.URL {
+		case "d":
+			err = mgr.Pause(it.ID)
+		case "f":
+			err = mgr.Cancel(it.ID)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return update(t, m, changedMsg{}), mgr
+}
+
+func TestBulkActionsApplyToSupportingMarkedRows(t *testing.T) {
+	tests := []struct {
+		name   string
+		marked []string
+		key    string
+		toast  string
+		want   map[string]queue.Status // final statuses
+	}{
+		{
+			name: "start", marked: []string{"a", "fail-b", "d"}, key: "s",
+			toast: "started 2 · skipped 1",
+			want:  map[string]queue.Status{"a": queue.Downloading, "d": queue.Downloading},
+		},
+		{
+			name: "pause and requeue", marked: []string{"a", "fail-b", "d", "e"}, key: "p",
+			toast: "paused 2 · requeued 1 · skipped 1",
+			want:  map[string]queue.Status{"a": queue.Paused, "e": queue.Paused, "fail-b": queue.Failed},
+		},
+		{
+			name: "cancel", marked: []string{"d", "e", "f"}, key: "c",
+			toast: "cancelled 2 · skipped 1",
+			want:  map[string]queue.Status{"d": queue.Cancelled, "e": queue.Cancelled, "f": queue.Cancelled},
+		},
+		{
+			name: "retry", marked: []string{"fail-b", "e", "f"}, key: "R",
+			toast: "retried 2 · skipped 1",
+			want:  map[string]queue.Status{"f": queue.Downloading},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, mgr := newBulkModel(t)
+			m = press(t, markURLs(t, m, tt.marked...), tt.key)
+			if m.toast.err != nil {
+				t.Fatalf("toast error: %v", m.toast.err)
+			}
+			if m.toast.text != tt.toast {
+				t.Errorf("toast = %q, want %q", m.toast.text, tt.toast)
+			}
+			for url, want := range tt.want {
+				waitFor(t, fmt.Sprintf("%s %v", url, want), func() bool { return statusOf(t, mgr, url) == want })
+			}
+		})
+	}
+}
+
+func TestBulkActionReportsManagerErrors(t *testing.T) {
+	m, mgr := newBulkModel(t)
+	m = markURLs(t, m, "e", "d")
+	// Remove d behind the model's back, so pausing it fails.
+	q, _ := mgr.Snapshot()
+	for _, it := range q {
+		if it.URL == "d" {
+			if err := mgr.Remove(it.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	m = press(t, m, "p")
+	if !errors.Is(m.toast.err, queue.ErrNotFound) {
+		t.Fatalf("toast error = %v, want %v", m.toast.err, queue.ErrNotFound)
+	}
+	if !strings.Contains(m.toast.text, "paused 1 · failed 1") {
+		t.Errorf("toast = %q, want the counts", m.toast.text)
+	}
+	if got := statusOf(t, mgr, "e"); got != queue.Paused {
+		t.Errorf("e = %v, want paused", got)
+	}
+}
+
+func TestBulkRemoveAsksOnce(t *testing.T) {
+	tests := []struct {
+		name   string
+		marked []string
+		note   string
+		left   []string // URLs left in the queue
+	}{
+		{name: "running", marked: []string{"a", "e"}, note: "Partial files will be deleted.", left: []string{"c", "fail-b", "d", "f"}},
+		{name: "waiting", marked: []string{"e", "f"}, note: "", left: []string{"a", "c", "fail-b", "d"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, mgr := newBulkModel(t)
+			m = press(t, markURLs(t, m, tt.marked...), "r")
+			if m.confirm == nil {
+				t.Fatal("no confirmation dialog")
+			}
+			if m.confirm.question != "Remove 2 downloads?" || m.confirm.note != tt.note {
+				t.Errorf("confirm = %q / %q, want %q / %q", m.confirm.question, m.confirm.note, "Remove 2 downloads?", tt.note)
+			}
+			m = press(t, m, "y")
+			if m.confirm != nil || m.toast.err != nil || m.toast.text != "removed 2" {
+				t.Fatalf("confirm = %v, toast = %q (%v)", m.confirm, m.toast.text, m.toast.err)
+			}
+			q, _ := mgr.Snapshot()
+			var got []string
+			for _, it := range q {
+				got = append(got, it.URL)
+			}
+			slices.Sort(got)
+			want := slices.Sorted(slices.Values(tt.left))
+			if !slices.Equal(got, want) {
+				t.Errorf("queue = %v, want %v", got, want)
+			}
+			if n := m.markCount(); n != 0 {
+				t.Errorf("%d marks left after removing the marked rows", n)
+			}
+		})
+	}
+}
+
+func TestBulkRemoveOnFinishedKeepsFiles(t *testing.T) {
+	m, mgr, r := newTestModel(t, 3, "a", "b", "c")
+	m = finishAll(t, m, mgr, r, "a", "b", "c")
+	m = press(t, m, "2")
+	m = press(t, markURLs(t, m, "a", "c"), "r")
+	if m.confirm == nil || m.confirm.note != "The downloaded files are kept." {
+		t.Fatalf("confirm = %+v", m.confirm)
+	}
+	m = press(t, m, "y")
+	if _, h := mgr.Snapshot(); len(h) != 1 || h[0].URL != "b" {
+		t.Errorf("history = %+v, want only b", h)
+	}
+	for _, u := range []string{"a", "c"} {
+		if _, err := os.Stat(filepath.Join(mgr.Config().DownloadDir, u+".mp4")); err != nil {
+			t.Errorf("file of %s deleted: %v", u, err)
+		}
 	}
 }

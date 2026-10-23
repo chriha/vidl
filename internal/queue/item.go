@@ -67,6 +67,12 @@ type Item struct {
 	// EstimatedSize is yt-dlp's size estimate in bytes before the download
 	// starts; 0 when unknown. Progress.Total replaces it once known.
 	EstimatedSize int64 `json:"estimated_size,omitempty"`
+
+	// Per-download overrides; zero values follow the settings.
+	ClipStart time.Duration `json:"clip_start,omitempty"`
+	ClipEnd   time.Duration `json:"clip_end,omitempty"`  // zero for "until the end"
+	Template  string        `json:"template,omitempty"`  // filename template
+	Subtitles *bool         `json:"subtitles,omitempty"` // embed subtitles
 }
 
 // DisplayTitle is the title, or the URL while the title is still unknown.
@@ -77,10 +83,18 @@ func (it Item) DisplayTitle() string {
 	return it.URL
 }
 
+// Clip is the part of the video to download; zero for all of it.
+func (it Item) Clip() ytdlp.Clip {
+	return ytdlp.Clip{Start: it.ClipStart, End: it.ClipEnd}
+}
+
 func (it *Item) clone() Item {
 	c := *it
 	c.PartFiles = slices.Clone(it.PartFiles)
 	c.Log = slices.Clone(it.Log)
+	if it.Subtitles != nil {
+		c.Subtitles = new(*it.Subtitles)
+	}
 	return c
 }
 

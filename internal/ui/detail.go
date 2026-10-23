@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -161,6 +162,15 @@ func (m Model) detailFields(it queue.Item, w int) []string {
 	add("URL", it.URL)
 	add("Source", joinNonEmpty(it.Uploader, it.Extractor, durationLabel(it.Duration)))
 	add("Format", joinNonEmpty(string(it.Format), resolutionLabel(it)))
+	add("Clip", clipLabel(it))
+	add("Template", it.Template)
+	switch {
+	case it.Subtitles == nil:
+	case *it.Subtitles:
+		add("Subtitles", "embedded")
+	default:
+		add("Subtitles", "off")
+	}
 	if it.Status == queue.Finished {
 		if it.Size > 0 {
 			add("Size", humanBytes(it.Size))
@@ -212,6 +222,33 @@ func progressLabel(it queue.Item) string {
 		}
 	}
 	return strings.Join(parts, " · ")
+}
+
+// clipLabel is the item's clip range ("1:30 – end"), or "" for the whole video.
+func clipLabel(it queue.Item) string {
+	clip := it.Clip()
+	if clip.IsZero() {
+		return ""
+	}
+	end := "end"
+	if clip.End > 0 {
+		end = clipTimeLabel(clip.End)
+	}
+	return clipTimeLabel(clip.Start) + " – " + end
+}
+
+// clipTimeLabel formats a clip time like "1:30" or "0:02.5", keeping the
+// fraction of a second that clip times may have.
+func clipTimeLabel(d time.Duration) string {
+	whole := d.Truncate(time.Second)
+	label := "0:00"
+	if whole > 0 {
+		label = humanDuration(whole)
+	}
+	if frac := d - whole; frac > 0 {
+		label += strings.TrimPrefix(strconv.FormatFloat(frac.Seconds(), 'f', -1, 64), "0")
+	}
+	return label
 }
 
 // resolutionLabel is the item's resolution ("1080p", "best"), or "" for audio.

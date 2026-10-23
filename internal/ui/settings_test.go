@@ -18,7 +18,10 @@ func settingsModel(t *testing.T, label string) Model {
 	t.Helper()
 	m, _, _ := newTestModel(t, 1)
 	m = press(t, m, "3")
-	for m.settings.cursor < len(settings) && settings[m.settings.cursor].label != label {
+	for range settings {
+		if settings[m.settings.cursor].label == label {
+			break
+		}
 		m = press(t, m, "j")
 	}
 	if settings[m.settings.cursor].label != label {
@@ -96,6 +99,21 @@ func TestSettingsBoolToggle(t *testing.T) {
 	m = press(t, m, "enter")
 	if saved(t, m).EmbedThumbnail {
 		t.Error("enter didn't disable")
+	}
+}
+
+func TestSettingsNotifyToggle(t *testing.T) {
+	m := settingsModel(t, "Desktop notifications")
+	if !m.mgr.Config().Notify {
+		t.Fatal("notifications off by default")
+	}
+	m = press(t, m, "space")
+	if saved(t, m).Notify || m.mgr.Config().Notify {
+		t.Error("space didn't disable")
+	}
+	m = press(t, m, "space")
+	if !saved(t, m).Notify {
+		t.Error("space didn't enable")
 	}
 }
 

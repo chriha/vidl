@@ -21,7 +21,8 @@ import (
 )
 
 // fakeRunner fails URLs starting with "fail", and blocks the rest until
-// cancelled or released with finish, which writes <url>.mp4. Every run first logs fakeLogLines lines.
+// cancelled or released with finish, which writes <url>.mp4, or fails URLs
+// starting with "broken". Every run first logs fakeLogLines lines.
 type fakeRunner struct {
 	mu   sync.Mutex
 	done map[string]chan struct{}
@@ -47,13 +48,19 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	for i := range fakeLogLines {
 		onEvent(ytdlp.Event{Kind: ytdlp.EventLog, Line: fmt.Sprintf("%s line %d", job.URL, i+1)})
 	}
-	if strings.HasPrefix(job.URL, "fail") {
+	if strings.Contains(job.URL, "fail") {
 		return errors.New("boom")
 	}
 	onEvent(ytdlp.Event{Kind: ytdlp.EventProgress, Progress: ytdlp.Progress{Percent: 42, Speed: 2048, ETA: time.Minute}})
 	select {
 	case <-f.ch(job.URL):
+		if strings.HasPrefix(job.URL, "broken") {
+			return errors.New("boom")
+		}
 		path := filepath.Join(job.Dir, job.URL+".mp4")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
 		if err := os.WriteFile(path, []byte("video"), 0o644); err != nil {
 			return err
 		}
@@ -220,6 +227,41 @@ func TestRetryFinishedRedownloads(t *testing.T) {
 	if len(m.history) != 1 || m.history[0].ID != first.ID || len(m.queue) != 0 {
 		t.Errorf("queue = %+v, history = %+v", m.queue, m.history)
 	}
+}
+
+func TestPauseTogglesRequeue(t *testing.T) {
+	m, mgr, _ := newTestModel(t, 1, "a", "b")
+	status := func(url string) queue.Status {
+		q, _ := mgr.Snapshot()
+		for _, it := range q {
+			if it.URL == url {
+				return it.Status
+			}
+		}
+		t.Fatalf("%q not in queue", url)
+		return 0
+	}
+	waitFor(t, "a running", func() bool { return status("a") == queue.Downloading })
+	m = update(t, m, changedMsg{})
+
+	m = selectURL(t, m, "b")
+	m = press(t, m, "p")
+	if got := status("b"); got != queue.Paused {
+		t.Fatalf("p on queued: b = %v, want paused", got)
+	}
+	m = update(t, m, changedMsg{})
+	m = press(t, m, "p")
+	if m.toast.err != nil {
+		t.Fatal(m.toast.err)
+	}
+	if got := status("b"); got != queue.Queued {
+		t.Fatalf("p on paused: b = %v, want queued (slot taken by a)", got)
+	}
+
+	m = selectURL(t, m, "a")
+	m = press(t, m, "p")
+	waitFor(t, "a paused", func() bool { return status("a") == queue.Paused })
+	waitFor(t, "b started in the freed slot", func() bool { return status("b") == queue.Downloading })
 }
 
 func selectURL(t *testing.T, m Model, url string) Model {

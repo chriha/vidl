@@ -119,6 +119,11 @@ var settings = []setting{
 		get: func(c config.Config) string { return c.CookiesFromBrowser },
 		set: func(c *config.Config, v string) { c.CookiesFromBrowser = v },
 	},
+	{
+		label: "Desktop notifications", help: "Notify when a download finishes or fails.", kind: kindBool,
+		get: func(c config.Config) string { return strconv.FormatBool(c.Notify) },
+		set: func(c *config.Config, v string) { c.Notify = v == "true" },
+	},
 }
 
 func formatNames() []string {
