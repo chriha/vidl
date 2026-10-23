@@ -222,6 +222,41 @@ func TestRetryFinishedRedownloads(t *testing.T) {
 	}
 }
 
+func TestPauseTogglesRequeue(t *testing.T) {
+	m, mgr, _ := newTestModel(t, 1, "a", "b")
+	status := func(url string) queue.Status {
+		q, _ := mgr.Snapshot()
+		for _, it := range q {
+			if it.URL == url {
+				return it.Status
+			}
+		}
+		t.Fatalf("%q not in queue", url)
+		return 0
+	}
+	waitFor(t, "a running", func() bool { return status("a") == queue.Downloading })
+	m = update(t, m, changedMsg{})
+
+	m = selectURL(t, m, "b")
+	m = press(t, m, "p")
+	if got := status("b"); got != queue.Paused {
+		t.Fatalf("p on queued: b = %v, want paused", got)
+	}
+	m = update(t, m, changedMsg{})
+	m = press(t, m, "p")
+	if m.toast.err != nil {
+		t.Fatal(m.toast.err)
+	}
+	if got := status("b"); got != queue.Queued {
+		t.Fatalf("p on paused: b = %v, want queued (slot taken by a)", got)
+	}
+
+	m = selectURL(t, m, "a")
+	m = press(t, m, "p")
+	waitFor(t, "a paused", func() bool { return status("a") == queue.Paused })
+	waitFor(t, "b started in the freed slot", func() bool { return status("b") == queue.Downloading })
+}
+
 func selectURL(t *testing.T, m Model, url string) Model {
 	t.Helper()
 	m = press(t, m, "g")

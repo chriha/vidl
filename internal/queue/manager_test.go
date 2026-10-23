@@ -217,6 +217,85 @@ func TestPauseAndResumeKeepsPartFiles(t *testing.T) {
 	}
 }
 
+func TestRequeueWaitsForFreeSlotAtItsPosition(t *testing.T) {
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	m, r := newManager(t, 1, store)
+	ids := add(m, "a", "b", "c")
+	r.waitStarted(t, "a")
+	m.Pause(ids[1])
+
+	if err := m.Requeue(ids[1]); err != nil {
+		t.Fatal(err)
+	}
+	if status(m, ids[1]) != Queued {
+		t.Fatalf("b = %v, want queued", status(m, ids[1]))
+	}
+	r.assertNoStart(t) // the only slot is still taken
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Queue[1].ID != ids[1] || st.Queue[1].Status != Queued {
+		t.Errorf("saved queue[1] = %s %v, want %s queued", st.Queue[1].ID, st.Queue[1].Status, ids[1])
+	}
+
+	r.finish("a", nil)
+	r.waitStarted(t, "b") // b kept its place ahead of c
+	r.assertNoStart(t)
+}
+
+func TestRequeueStartsWhenSlotFree(t *testing.T) {
+	m, r := newManager(t, 1, &MemStore{})
+	id := add(m, "a")[0]
+	r.waitStarted(t, "a")
+	m.Pause(id)
+	waitStatus(t, m, id, Paused)
+
+	if err := m.Requeue(id); err != nil {
+		t.Fatal(err)
+	}
+	r.waitStarted(t, "a")
+	waitStatus(t, m, id, Downloading)
+}
+
+func TestRequeueLeavesOtherStatusesAlone(t *testing.T) {
+	m, r := newManager(t, 1, &MemStore{})
+	finished, _ := finishedItem(t, m, r, "done")
+	ids := add(m, "run", "wait", "fail", "cancel")
+	r.waitStarted(t, "run")
+	m.Start(ids[2])
+	r.waitStarted(t, "fail")
+	r.finish("fail", errors.New("boom"))
+	waitStatus(t, m, ids[2], Failed)
+	m.Cancel(ids[3])
+
+	for _, tc := range []struct {
+		name string
+		id   string
+		want Status
+	}{
+		{"downloading", ids[0], Downloading},
+		{"queued", ids[1], Queued},
+		{"failed", ids[2], Failed},
+		{"cancelled", ids[3], Cancelled},
+		{"finished", finished, Finished},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := m.Requeue(tc.id); err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if got := status(m, tc.id); got != tc.want {
+				t.Errorf("status = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	r.assertNoStart(t)
+
+	if err := m.Requeue("nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown id: err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestCancelDeletesPartFiles(t *testing.T) {
 	m, r := newManager(t, 1, &MemStore{})
 	dir := t.TempDir()

@@ -217,6 +217,22 @@ func (m *Manager) Pause(id string) error {
 // Requeue puts a paused download back in the queue at its position, so it
 // starts once a slot is free. Downloads in any other status are left alone.
 func (m *Manager) Requeue(id string) error {
+	m.mu.Lock()
+	defer m.notify()
+	defer m.mu.Unlock()
+	it := m.findQueuedLocked(id)
+	if it == nil {
+		if slices.ContainsFunc(m.history, byID(id)) {
+			return nil
+		}
+		return ErrNotFound
+	}
+	if it.Status != Paused {
+		return nil
+	}
+	it.Status = Queued
+	m.scheduleLocked()
+	m.saveLocked()
 	return nil
 }
 
