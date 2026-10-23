@@ -500,6 +500,7 @@ directly to see whether the problem is the site or vidl.
 - [x] UI scaffold: tabs, navigation, help
 - [x] Downloads and Finished tables with progress bars, speed and ETA
 - [x] Detail panel (`enter`)
+- [x] Error view for failed downloads (`i`)
 - [x] New-download dialog with format and resolution selection, playlist
       expansion and multi-URL paste
 - [x] Settings tab
