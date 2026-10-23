@@ -108,6 +108,7 @@ internal/ui/           Bubble Tea root model
   model.go, keys.go, format.go (humanBytes/humanSpeed/humanDuration)
   table.go, views.go   Downloads/Finished tables
   detail.go            detail panel
+  errorview.go         `i`: full-screen error view of a failed download
   dialog.go            new-download dialog, Prober interface
   settings.go          Settings tab: field table, inline editing, validation
   search.go            `/` filter per tab
