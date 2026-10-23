@@ -8,8 +8,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"vidl/internal/queue"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/queue"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 func TestLayoutDropsColumnsWhenNarrow(t *testing.T) {

@@ -8,13 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
 
-	"vidl/internal/config"
-	"vidl/internal/queue"
-	"vidl/internal/ui"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/config"
+	"github.com/chriha/vidl/internal/queue"
+	"github.com/chriha/vidl/internal/ui"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -37,7 +39,8 @@ func main() {
 			fmt.Print(usage)
 			return
 		case "-v", "--version":
-			fmt.Println("vidl", version)
+			info, ok := debug.ReadBuildInfo()
+			fmt.Println("vidl", resolveVersion(version, info, ok))
 			return
 		}
 	}
@@ -55,7 +58,7 @@ func run(urls []string) error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("%v not found on PATH; install with: brew install yt-dlp ffmpeg", missing)
+		return fmt.Errorf("%v not found on PATH; %s", missing, installHint(runtime.GOOS))
 	}
 
 	dir, err := config.Dir()

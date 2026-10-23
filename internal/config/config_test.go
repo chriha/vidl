@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 func TestLoadMissingReturnsDefaults(t *testing.T) {

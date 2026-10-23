@@ -15,7 +15,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 
-	"vidl/internal/queue"
+	"github.com/chriha/vidl/internal/queue"
 )
 
 type tab int

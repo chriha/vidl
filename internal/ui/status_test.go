@@ -3,8 +3,8 @@ package ui
 import (
 	"testing"
 
-	"vidl/internal/queue"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/queue"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 func TestSummary(t *testing.T) {

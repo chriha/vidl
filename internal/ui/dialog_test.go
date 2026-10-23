@@ -9,8 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"vidl/internal/queue"
-	"vidl/internal/ytdlp"
+	"github.com/chriha/vidl/internal/queue"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 // fakeProber returns infos[url], or errors for unknown URLs. URLs in block

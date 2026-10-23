@@ -1,6 +1,6 @@
 # vidl implementation plan
 
-Handoff document for continuing development. Milestones 1–8 are done;
+Handoff document for continuing development. Milestones 1–9 are done;
 this file describes what was decided, what exists and what was learned the hard
 way, in enough detail to continue without the original conversation.
 
@@ -54,7 +54,9 @@ Further decisions made in planning that the user accepted:
 
 - macOS (darwin/arm64), zsh, Go **1.27.3**, yt-dlp 2026.10.21, ffmpeg and
   tmux installed via Homebrew.
-- Module path is `vidl` (no remote yet), branch `main`.
+- Module path is `github.com/chriha/vidl`; the remote is
+  `github.com/chriha/vidl`, default branch `main`. Work happens on
+  `feature/m<n>-<slug>` branches merged via PR.
 - The user's `~/.npmrc` is a directory, which breaks yt-dlp's Deno-based
   YouTube challenge solver (warning: `n challenge solving failed`). Downloads
   still work but some formats may be missing. Not a vidl bug; the user was
@@ -83,13 +85,19 @@ paste, for multi-URL paste), `View.WindowTitle`, `View.ProgressBar`
 cmd/vidl/main.go       flags, PATH check, config load (writes defaults on
                        first run), queue.New, CLI URLs → Add, run program,
                        mgr.Close() on exit
+cmd/vidl/version.go    version from ldflags or `go install` build info,
+                       per-OS install hint
+.github/workflows/     ci.yml (make check on Linux/macOS, Windows vet and
+                       build), release.yml (tag v* → make dist → GitHub
+                       release with the CHANGELOG section as notes)
 internal/ytdlp/        no UI or queue knowledge
   format.go            Format type, Formats, Resolutions, FormatArgs
   run.go               Job, Job.Args(), Runner.Run
   progress.go          Event types, Tracker (line → Event, multi-stream %)
   probe.go             Runner.Probe, ParseInfo, Info/Entry
   proc_unix.go         process group + SIGINT on cancel
-  proc_windows.go      no-op fallback
+  proc_windows.go      process group + CTRL_BREAK on cancel, taskkill
+                       fallback
 internal/queue/        no UI knowledge
   item.go              Status, Item
   manager.go           Manager: scheduling, actions, events → items
@@ -269,14 +277,15 @@ message.
   toast.
 - Commit once per milestone (or meaningful sub-step), after `make check`
   passes, with a descriptive message and the attribution line your session
-  specifies. Ask before pushing (there's no remote yet).
+  specifies. Ask before pushing; agents open draft PRs and never merge.
 - Update `README.md` when behaviour changes: flip the keybinding table's
   "planned" entries to ✅ and tick the roadmap.
 
 ## Remaining milestones
 
-All milestones (4–8) are done; the sections below are kept as the record of
-what each one specified.
+All milestones (4–9) are done; the sections below are kept as the record of
+what each one specified. Known gap: `o`/`O` on Windows (`systemOpen`
+returns an error there).
 
 ### Milestone 4: Downloads and Finished tables
 
@@ -394,6 +403,29 @@ dialog can be tested with a fake.
   gracefully, minimum size message.
 - README: final keybinding table, screenshots/GIF (e.g. with
   [vhs](https://github.com/charmbracelet/vhs)), and roadmap ticked.
+
+### Milestone 9: Release
+
+- MIT `LICENSE`; README license section.
+- Module path `github.com/chriha/vidl` so `go install
+  github.com/chriha/vidl/cmd/vidl@latest` works; `--version` falls back to
+  the module version from build info when no `-ldflags` version is set.
+- `make dist` builds macOS, Linux and Windows (amd64, arm64; `.exe` on
+  Windows) and writes `dist/checksums.txt`.
+- GitHub Actions: CI (`make check` on ubuntu and macos; Windows `go vet` and
+  `go build`, since the ytdlp tests fake yt-dlp with shell scripts) and a
+  release workflow on `v*` tags that publishes `dist/*` with the version's
+  `CHANGELOG.md` section as notes.
+- `CHANGELOG.md` (Keep a Changelog) with the 0.1.0 entry.
+- README: release binaries, `go install`, real clone URL, winget, releasing.
+- Windows pause/cancel: `CREATE_NEW_PROCESS_GROUP` and
+  `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid)` via `syscall` (no
+  `golang.org/x/sys` import, so `go.mod` is unchanged); without a shared
+  console it falls back to `taskkill /T /F` and then `Process.Kill`.
+  CTRL_C can't target another process group, hence CTRL_BREAK. Python's
+  default SIGBREAK handling ends yt-dlp without deleting `.part` files, so
+  paused downloads resume. Untested on real Windows; only vetted and
+  cross-compiled.
 
 ## Verifying changes
 

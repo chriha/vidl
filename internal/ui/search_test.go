@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"vidl/internal/queue"
+	"github.com/chriha/vidl/internal/queue"
 )
 
 func urls(items []queue.Item) []string {
