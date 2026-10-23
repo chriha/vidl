@@ -3,11 +3,14 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/chriha/vidl/internal/queue"
 	"github.com/chriha/vidl/internal/ytdlp"
@@ -224,11 +227,12 @@ func TestDialogPlaylistQueuesEntries(t *testing.T) {
 	m.dialog.input.SetValue("https://x.test/pl")
 	m, res = submit(t, m)
 	m = update(t, m, res)
+	m = press(t, m, "enter")
 	// Heights are unknown for playlists, so every resolution is offered.
 	if !slices.Equal(m.dialog.resolutions, ytdlp.Resolutions) {
 		t.Errorf("resolutions = %v", m.dialog.resolutions)
 	}
-	m = press(t, m, "h", "enter") // mp4 → opus
+	m = press(t, m, "enter", "h", "enter") // checklist, then mp4 → opus
 	q, _ := mgr.Snapshot()
 	if len(q) != 2 {
 		t.Fatalf("queue = %d items, want 2", len(q))
@@ -266,14 +270,14 @@ func TestDefaultResolution(t *testing.T) {
 }
 
 // probeDetails opens the dialog, probes url and returns the model at the
-// details step.
+// details step (the checklist step for playlists).
 func probeDetails(t *testing.T, p *fakeProber, url string) (Model, *queue.Manager) {
 	t.Helper()
 	m, mgr := newDialogModel(t, p)
 	m.dialog.input.SetValue(url)
 	m, res := submit(t, m)
 	m = update(t, m, res)
-	if m.dialog.step != stepDetails {
+	if m.dialog.step != stepDetails && m.dialog.step != stepEntries { // playlists list their entries first
 		t.Fatalf("step = %d, err = %v", m.dialog.step, m.dialog.err)
 	}
 	return m, mgr
@@ -414,6 +418,7 @@ func TestDialogPlaylistOverrides(t *testing.T) {
 		}},
 	}}
 	m, mgr := probeDetails(t, p, "https://x.test/pl")
+	m = press(t, m, "enter")
 	want := []int{focusResolution, focusTemplate, focusSubtitles, focusFormat}
 	if got := focusOrder(t, m, len(want)); !slices.Equal(got, want) {
 		t.Errorf("tab order = %v, want %v (no clip fields)", got, want)
@@ -512,5 +517,203 @@ func TestDialogSponsorBlockPlaylist(t *testing.T) {
 		if got := r.job(t, u).SponsorBlockRemove; got != "" {
 			t.Errorf("%s: job SponsorBlockRemove = %q, want nothing", u, got)
 		}
+	}
+}
+
+// entriesDialog probes a playlist of n entries on a tall terminal and returns
+// the model at the checklist step.
+func entriesDialog(t *testing.T, n int) (Model, *queue.Manager) {
+	t.Helper()
+	info := &ytdlp.Info{Title: "List", IsPlaylist: true}
+	for i := range n {
+		u := fmt.Sprintf("https://x.test/%d", i)
+		info.Entries = append(info.Entries, ytdlp.Entry{Title: fmt.Sprintf("Entry %d", i), URL: u})
+	}
+	m, mgr := newDialogModel(t, &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/pl": info}})
+	m = update(t, m, tea.WindowSizeMsg{Width: 100, Height: 40})
+	m.dialog.input.SetValue("https://x.test/pl")
+	m, res := submit(t, m)
+	m = update(t, m, res)
+	if m.dialog.step != stepEntries {
+		t.Fatalf("step = %d, err = %v", m.dialog.step, m.dialog.err)
+	}
+	return m, mgr
+}
+
+func checkedCount(d *newDialog) int {
+	n := 0
+	for _, c := range d.checked {
+		if c {
+			n++
+		}
+	}
+	return n
+}
+
+func TestDialogEntriesStartChecked(t *testing.T) {
+	m, _ := entriesDialog(t, 3)
+	if d := m.dialog; len(d.checked) != 3 || checkedCount(d) != 3 || d.cursor != 0 {
+		t.Errorf("checked = %v, cursor = %d", d.checked, d.cursor)
+	}
+}
+
+func TestDialogSingleVideoSkipsEntries(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V"}}}
+	m, _ := probeDetails(t, p, "https://x.test/v")
+	if m.dialog.step != stepDetails {
+		t.Errorf("step = %d, want details", m.dialog.step)
+	}
+}
+
+func TestDialogEntriesToggleMovesDown(t *testing.T) {
+	m, _ := entriesDialog(t, 3)
+	m = press(t, m, "space")
+	if d := m.dialog; d.checked[0] || !d.checked[1] || d.cursor != 1 {
+		t.Errorf("checked = %v, cursor = %d", d.checked, d.cursor)
+	}
+	m = press(t, m, "space", "space") // last row: toggles, cursor stays
+	if d := m.dialog; d.checked[1] || d.checked[2] || d.cursor != 2 {
+		t.Errorf("checked = %v, cursor = %d", d.checked, d.cursor)
+	}
+	m = press(t, m, "k", "space")
+	if d := m.dialog; !d.checked[1] || d.cursor != 2 {
+		t.Errorf("checked = %v, cursor = %d", d.checked, d.cursor)
+	}
+}
+
+func TestDialogEntriesToggleAll(t *testing.T) {
+	m, _ := entriesDialog(t, 3)
+	m = press(t, m, "space", "a") // one unchecked: check all
+	if n := checkedCount(m.dialog); n != 3 {
+		t.Errorf("checked = %d, want 3", n)
+	}
+	m = press(t, m, "a") // all checked: uncheck all
+	if n := checkedCount(m.dialog); n != 0 {
+		t.Errorf("checked = %d, want 0", n)
+	}
+}
+
+func TestDialogEntriesNavigation(t *testing.T) {
+	m, _ := entriesDialog(t, 30)
+	if rows := m.entriesRows(); rows != 10 {
+		t.Fatalf("rows = %d, want 10", rows)
+	}
+	tests := []struct {
+		keys []string
+		want int
+	}{
+		{[]string{"k"}, 0},
+		{[]string{"j", "j"}, 2},
+		{[]string{"j", "j", "k"}, 1},
+		{[]string{"down", "down", "up"}, 1},
+		{[]string{"G"}, 29},
+		{[]string{"G", "j"}, 29},
+		{[]string{"G", "g"}, 0},
+		{[]string{"ctrl+d"}, 5},
+		{[]string{"ctrl+d", "ctrl+u"}, 0},
+		{[]string{"ctrl+u"}, 0},
+		{[]string{"G", "ctrl+d"}, 29},
+	}
+	for _, tc := range tests {
+		got := press(t, m, tc.keys...).dialog.cursor
+		if got != tc.want {
+			t.Errorf("%v: cursor = %d, want %d", tc.keys, got, tc.want)
+		}
+	}
+}
+
+func TestDialogEntriesWindowFollowsCursor(t *testing.T) {
+	m, _ := entriesDialog(t, 30)
+	m = press(t, m, "G")
+	rows := m.entriesRows()
+	if d := m.dialog; d.top != 30-rows {
+		t.Errorf("top = %d, want %d", d.top, 30-rows)
+	}
+	m = press(t, m, "g")
+	if m.dialog.top != 0 {
+		t.Errorf("top = %d, want 0", m.dialog.top)
+	}
+}
+
+func TestDialogEntriesEnterNeedsSelection(t *testing.T) {
+	m, mgr := entriesDialog(t, 2)
+	m = press(t, m, "a", "enter") // uncheck all, then try to continue
+	if m.dialog.step != stepEntries || m.dialog.err == nil || m.dialog.err.Error() != "select at least one entry" {
+		t.Fatalf("step = %d, err = %v", m.dialog.step, m.dialog.err)
+	}
+	m = press(t, m, "j")
+	if m.dialog.err != nil {
+		t.Errorf("err not cleared by the next key: %v", m.dialog.err)
+	}
+	m = press(t, m, "space", "enter")
+	if m.dialog.step != stepDetails {
+		t.Fatalf("step = %d, want details", m.dialog.step)
+	}
+	if q, _ := mgr.Snapshot(); len(q) != 1 {
+		t.Errorf("queue = %d items before queueing, want 1", len(q))
+	}
+}
+
+func TestDialogEntriesEsc(t *testing.T) {
+	m, _ := entriesDialog(t, 3)
+	m = press(t, m, "space", "enter") // uncheck first, continue
+	if m.dialog.step != stepDetails {
+		t.Fatalf("step = %d, want details", m.dialog.step)
+	}
+	m = press(t, m, "esc")
+	if d := m.dialog; d.step != stepEntries || d.checked[0] || checkedCount(d) != 2 {
+		t.Errorf("step = %d, checked = %v: selection not kept", d.step, d.checked)
+	}
+	m = press(t, m, "esc")
+	if m.dialog.step != stepInput {
+		t.Errorf("step = %d, want input", m.dialog.step)
+	}
+	// A new probe resets the selection.
+	m, res := submit(t, m)
+	m = update(t, m, res)
+	if d := m.dialog; d.step != stepEntries || checkedCount(d) != 3 {
+		t.Errorf("step = %d, checked = %v, want all checked", d.step, d.checked)
+	}
+}
+
+func TestDialogEntriesQueueOnlyChecked(t *testing.T) {
+	m, mgr := entriesDialog(t, 4)
+	m = press(t, m, "space", "j", "space", "enter") // uncheck 0 and 2
+	if got := strings.Join(m.dialog.detailsLines(80), "\n"); !strings.Contains(got, "2 of 4 entries") || !strings.Contains(got, "enter queue 2 downloads") {
+		t.Errorf("details lack the checked count:\n%s", got)
+	}
+	m = press(t, m, "enter")
+	if m.dialog != nil {
+		t.Fatal("dialog still open")
+	}
+	q, _ := mgr.Snapshot()
+	var urls []string
+	for _, it := range q {
+		if strings.HasPrefix(it.URL, "https://x.test/") {
+			urls = append(urls, it.URL)
+		}
+	}
+	if want := []string{"https://x.test/1", "https://x.test/3"}; !slices.Equal(urls, want) {
+		t.Errorf("queued %v, want %v", urls, want)
+	}
+}
+
+func TestDialogEntriesFitShortTerminal(t *testing.T) {
+	m, _ := entriesDialog(t, 30)
+	m = update(t, m, tea.WindowSizeMsg{Width: 100, Height: 16})
+	rows := m.entriesRows()
+	if rows < 1 || rows >= 10 {
+		t.Fatalf("rows = %d, want fewer than 10", rows)
+	}
+	m = press(t, m, "G", "a", "enter") // error line shown too
+	view := m.dialogView()
+	if h := lipgloss.Height(view); h > m.bodyHeight() {
+		t.Errorf("dialog is %d lines, body only %d:\n%s", h, m.bodyHeight(), view)
+	}
+	if !strings.Contains(view, "esc back") {
+		t.Errorf("hint line not visible:\n%s", view)
+	}
+	if !strings.Contains(view, "↑") {
+		t.Errorf("no ↑ more marker at the end of the list:\n%s", view)
 	}
 }
