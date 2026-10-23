@@ -34,13 +34,21 @@ const (
 	stepBatch // several pasted URLs, queued with defaults
 )
 
+// Fields of the details step, in tab order.
 const (
 	focusFormat = iota
 	focusResolution
+	focusClipStart // single videos only
+	focusClipEnd   // single videos only
+	focusTemplate
+	focusSubtitles
 )
 
 // playlistPreview is the number of playlist entries listed in the dialog.
 const playlistPreview = 5
+
+// fieldLabelW is the width of the field labels in the details step.
+const fieldLabelW = 11
 
 var (
 	newDialogStyle    = dialogStyle.BorderForeground(lipgloss.Color("12"))
@@ -75,6 +83,10 @@ type newDialog struct {
 	format      int // index into ytdlp.Formats
 	resolutions []string
 	res         int // index into resolutions
+	clipStart   textinput.Model
+	clipEnd     textinput.Model
+	template    textinput.Model // empty for the setting
+	subtitles   bool
 
 	batch []string
 }
@@ -86,7 +98,14 @@ func (m *Model) openDialog() tea.Cmd {
 	in.Prompt = "URL "
 	in.Placeholder = "https://…"
 	in.SetWidth(m.dialogWidth() - 8)
-	d := &newDialog{input: in, spinner: spinner.New(spinner.WithSpinner(spinner.Dot))}
+	templateW := m.dialogWidth() - newDialogStyle.GetHorizontalFrameSize() - fieldLabelW - 4
+	d := &newDialog{
+		input:     in,
+		spinner:   spinner.New(spinner.WithSpinner(spinner.Dot)),
+		clipStart: fieldInput("0:00", 10),
+		clipEnd:   fieldInput("end", 10),
+		template:  fieldInput("setting", templateW),
+	}
 	m.dialog = d
 	read := m.clipboard
 	return tea.Batch(d.input.Focus(), func() tea.Msg {
@@ -96,6 +115,15 @@ func (m *Model) openDialog() tea.Cmd {
 		}
 		return clipboardMsg(s)
 	})
+}
+
+// fieldInput is a text field of the details step.
+func fieldInput(placeholder string, width int) textinput.Model {
+	in := textinput.New()
+	in.Prompt = ""
+	in.Placeholder = placeholder
+	in.SetWidth(width)
+	return in
 }
 
 func (m *Model) closeDialog() {
@@ -123,6 +151,11 @@ func (m Model) handleDialogMsg(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.handleDialogKey(msg)
 	case tea.PasteMsg:
+		if in := d.textField(); d.step == stepDetails && in != nil {
+			*in, cmd = in.Update(msg)
+			d.err = nil
+			return m, cmd
+		}
 		if d.step != stepInput {
 			return m, nil
 		}
@@ -155,8 +188,12 @@ func (m Model) handleDialogMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if d.step == stepProbing {
 			d.spinner, cmd = d.spinner.Update(msg)
 		}
-	default:
-		d.input, cmd = d.input.Update(msg) // cursor blink
+	default: // cursor blink
+		if in := d.textField(); d.step == stepDetails && in != nil {
+			*in, cmd = in.Update(msg)
+		} else {
+			d.input, cmd = d.input.Update(msg)
+		}
 	}
 	return m, cmd
 }
@@ -187,19 +224,7 @@ func (m Model) handleDialogKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			return m, d.input.Focus()
 		}
 	case stepDetails:
-		switch msg.String() {
-		case "esc":
-			d.step = stepInput
-			return m, d.input.Focus()
-		case "enter":
-			m.queueDetails()
-		case "tab", "shift+tab", "j", "k", "up", "down":
-			d.toggleFocus()
-		case "h", "left":
-			d.change(-1)
-		case "l", "right":
-			d.change(1)
-		}
+		return m.handleDetailsKey(msg)
 	case stepBatch:
 		switch msg.String() {
 		case "esc":
@@ -211,6 +236,43 @@ func (m Model) handleDialogKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			}
 			m.queueAndClose(reqs)
 		}
+	}
+	return m, nil
+}
+
+// handleDetailsKey handles keys in the details step. A focused text field
+// takes every key but the navigation ones.
+func (m Model) handleDetailsKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	d := m.dialog
+	in := d.textField()
+	k := msg.String()
+	if k != "enter" {
+		d.err = nil // shown until the next edit or move
+	}
+	switch {
+	case k == "esc":
+		d.focus = focusFormat
+		d.focusField()
+		d.step = stepInput
+		return m, d.input.Focus()
+	case k == "enter":
+		m.queueDetails()
+	case k == "tab" || k == "down":
+		return m, d.moveFocus(1)
+	case k == "shift+tab" || k == "up":
+		return m, d.moveFocus(-1)
+	case in != nil:
+		var cmd tea.Cmd
+		*in, cmd = in.Update(msg)
+		return m, cmd
+	case k == "j":
+		return m, d.moveFocus(1)
+	case k == "k":
+		return m, d.moveFocus(-1)
+	case k == "h" || k == "left":
+		d.change(-1)
+	case k == "l" || k == "right" || (k == "space" && d.focus == focusSubtitles):
+		d.change(1)
 	}
 	return m, nil
 }
@@ -245,6 +307,11 @@ func (d *newDialog) showDetails(info *ytdlp.Info, cfg config.Config) {
 	d.format = max(slices.Index(ytdlp.Formats, cfg.DefaultFormat), 0)
 	d.resolutions = availableResolutions(info.Heights)
 	d.res = defaultResolution(d.resolutions, cfg.DefaultResolution)
+	d.clipStart.SetValue("")
+	d.clipEnd.SetValue("")
+	d.template.SetValue(cfg.FilenameTemplate)
+	d.subtitles = cfg.EmbedSubtitles
+	d.focusField()
 }
 
 // availableResolutions is "best" plus the standard resolutions up to the
@@ -281,28 +348,84 @@ func (d *newDialog) audio() bool {
 	return ytdlp.Formats[d.format].IsAudio()
 }
 
-func (d *newDialog) toggleFocus() {
-	if d.focus == focusFormat && !d.audio() {
-		d.focus = focusResolution
-	} else {
-		d.focus = focusFormat
+// fields are the details step's fields in tab order: no resolution for audio
+// and no clip for playlists.
+func (d *newDialog) fields() []int {
+	f := []int{focusFormat}
+	if !d.audio() {
+		f = append(f, focusResolution)
 	}
+	if !d.info.IsPlaylist {
+		f = append(f, focusClipStart, focusClipEnd)
+	}
+	return append(f, focusTemplate, focusSubtitles)
+}
+
+// moveFocus focuses the next (delta 1) or previous (-1) field, wrapping around.
+func (d *newDialog) moveFocus(delta int) tea.Cmd {
+	f := d.fields()
+	i := max(slices.Index(f, d.focus), 0)
+	d.focus = f[(i+delta+len(f))%len(f)]
+	return d.focusField()
+}
+
+// textField is the focused text field, or nil for a selector.
+func (d *newDialog) textField() *textinput.Model {
+	switch d.focus {
+	case focusClipStart:
+		return &d.clipStart
+	case focusClipEnd:
+		return &d.clipEnd
+	case focusTemplate:
+		return &d.template
+	}
+	return nil
+}
+
+// focusField gives the text cursor to the focused text field, if any.
+func (d *newDialog) focusField() tea.Cmd {
+	d.clipStart.Blur()
+	d.clipEnd.Blur()
+	d.template.Blur()
+	if in := d.textField(); in != nil {
+		in.CursorEnd()
+		return in.Focus()
+	}
+	return nil
 }
 
 func (d *newDialog) change(delta int) {
-	if d.focus == focusFormat {
+	switch d.focus {
+	case focusFormat:
 		d.format = (d.format + delta + len(ytdlp.Formats)) % len(ytdlp.Formats)
-		return
+	case focusResolution:
+		d.res = (d.res + delta + len(d.resolutions)) % len(d.resolutions)
+	case focusSubtitles:
+		d.subtitles = !d.subtitles
 	}
-	d.res = (d.res + delta + len(d.resolutions)) % len(d.resolutions)
 }
 
 // queueDetails queues the probed video, or every playlist entry, with the
-// chosen format and resolution.
+// chosen format, resolution and overrides. An invalid clip is shown as the
+// dialog's error instead.
 func (m *Model) queueDetails() {
 	d := m.dialog
 	info, format, res := d.info, ytdlp.Formats[d.format], d.resolutions[d.res]
+	cfg := m.mgr.Config()
+	template := strings.TrimSpace(d.template.Value())
+	if template == strings.TrimSpace(cfg.FilenameTemplate) {
+		template = "" // follow the setting
+	}
+	var subtitles *bool
+	if d.subtitles != cfg.EmbedSubtitles {
+		subtitles = new(d.subtitles)
+	}
 	if !info.IsPlaylist {
+		clip, err := ytdlp.ParseClip(d.clipStart.Value(), d.clipEnd.Value())
+		if err != nil {
+			d.err = fmt.Errorf("clip %w", err)
+			return
+		}
 		m.queueAndClose([]queue.NewItem{{
 			URL:        cmpStr(info.URL, strings.TrimSpace(d.input.Value())),
 			Title:      info.Title,
@@ -311,12 +434,18 @@ func (m *Model) queueDetails() {
 			Extractor:  info.Extractor,
 			Format:     format,
 			Resolution: res,
+			Clip:       clip,
+			Template:   template,
+			Subtitles:  subtitles,
 		}})
 		return
 	}
 	reqs := make([]queue.NewItem, len(info.Entries))
 	for i, e := range info.Entries {
-		reqs[i] = queue.NewItem{URL: e.URL, Title: e.Title, Duration: e.Duration, Format: format, Resolution: res}
+		reqs[i] = queue.NewItem{
+			URL: e.URL, Title: e.Title, Duration: e.Duration, Format: format, Resolution: res,
+			Template: template, Subtitles: subtitles,
+		}
 	}
 	m.queueAndClose(reqs)
 }
@@ -416,25 +545,45 @@ func (d *newDialog) detailsLines(w int) []string {
 	for i, r := range d.resolutions {
 		resLabels[i] = resolutionName(r)
 	}
+	subtitles := 0
+	if d.subtitles {
+		subtitles = 1
+	}
 	lines = append(lines, "",
 		ansi.Truncate(selector("Type", formats, d.format, d.focus == focusFormat, false), w, "…"),
-		ansi.Truncate(selector("Resolution", resLabels, d.res, d.focus == focusResolution, d.audio()), w, "…"),
+		ansi.Truncate(selector("Resolution", resLabels, d.res, d.focus == focusResolution, d.audio()), w, "…"))
+	if !info.IsPlaylist {
+		lines = append(lines,
+			ansi.Truncate(fieldLabel("Clip start", d.focus == focusClipStart)+" "+d.clipStart.View(), w, "…"),
+			ansi.Truncate(fieldLabel("Clip end", d.focus == focusClipEnd)+" "+d.clipEnd.View(), w, "…"))
+	}
+	lines = append(lines,
+		ansi.Truncate(fieldLabel("Template", d.focus == focusTemplate)+" "+d.template.View(), w, "…"),
+		ansi.Truncate(selector("Subtitles", []string{"off", "embed"}, subtitles, d.focus == focusSubtitles, false), w, "…"),
 		"")
+	if d.err != nil {
+		lines = append(lines, errorStyle.Width(w).MaxHeight(3).Render(d.err.Error()), "")
+	}
 	action := "enter queue"
 	if info.IsPlaylist {
 		action = fmt.Sprintf("enter queue %d downloads", len(info.Entries))
 	}
-	lines = append(lines, dimStyle.Render(ansi.Truncate(action+" · tab/j/k field · h/l change · esc back", w, "…")))
+	lines = append(lines, dimStyle.Render(ansi.Truncate(action+" · tab/↑/↓ field · h/l/space change · esc back", w, "…")))
 	return lines
 }
 
-// selector renders a labelled row of options with the chosen one marked.
-func selector(label string, options []string, chosen int, focused, disabled bool) string {
+// fieldLabel renders a field's label, marked when the field is focused.
+func fieldLabel(label string, focused bool) string {
 	marker := "  "
 	if focused {
 		marker = "› "
 	}
-	parts := []string{marker + lipgloss.NewStyle().Width(11).Render(label)}
+	return marker + lipgloss.NewStyle().Width(fieldLabelW).Render(label)
+}
+
+// selector renders a labelled row of options with the chosen one marked.
+func selector(label string, options []string, chosen int, focused, disabled bool) string {
+	parts := []string{fieldLabel(label, focused)}
 	for i, o := range options {
 		style := optionStyle
 		switch {

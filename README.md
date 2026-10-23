@@ -16,8 +16,10 @@ downloads resume where they stopped.
 
 - **New-download dialog**: paste a URL (prefilled from the clipboard), see
   its title, uploader, duration and approximate size, pick a format and
-  resolution, and queue it. Playlists queue every entry; pasting several URLs
-  at once queues them all with the default settings.
+  resolution, and queue it. Per download you can also download only a clip
+  (start and end time), use a different filename template, or turn embedded
+  subtitles on or off. Playlists queue every entry; pasting several URLs at
+  once queues them all with the default settings.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
 - **Per-download progress**: percentage, speed and ETA, combined across the
@@ -34,8 +36,9 @@ downloads resume where they stopped.
   filter for the queue.
 - **Status line** with the total speed and the number of downloads per
   status, and the overall progress in the terminal's window title.
-- **Detail panel** for any download: source, format, progress per stream,
-  timestamps, output and partial files, errors, and yt-dlp's latest output
+- **Detail panel** for any download: source, format, clip, template and
+  subtitle overrides, progress per stream, timestamps, output and partial
+  files, errors, and yt-dlp's latest output
   for running or failed downloads.
 - **Desktop notifications** when a download finishes or fails. Downloads
   ending within about two seconds of each other share one notification.
@@ -156,11 +159,26 @@ The UI has three tabs:
 
 Press `n` to add a download. If the clipboard holds a URL, it's already
 filled in; otherwise paste or type one and press `enter` to fetch its details.
-Choose the file type and resolution with `tab`/`j`/`k` (field) and `h`/`l`
-(value), then press `enter` to queue it, or `esc` to go back and edit the URL.
-Resolutions above the video's best are hidden, and audio formats ignore the
-resolution. For a playlist, `enter` queues every entry with the chosen
-settings. Pasting several URLs at once offers to queue them all with the
+Move between the fields with `tab`/`shift+tab` or `↑`/`↓` (`j`/`k` outside
+text fields), change the file type, resolution and subtitles with `h`/`l`,
+and type into the text fields. Then press `enter` to queue it, or `esc` to go
+back and edit the URL. Resolutions above the video's best are hidden, and
+audio formats ignore the resolution.
+
+- **Clip start / end** download only part of the video. Times are
+  `[[h:]m:]s`, e.g. `90`, `1:30` or `1:02:03`; leave start empty to begin at
+  the start and end empty to go to the end. The end must be after the start,
+  otherwise the dialog shows an error and doesn't queue. Clips are cut by
+  ffmpeg, so a paused clip starts over when resumed.
+- **Template** is the filename template for this download, prefilled with
+  the setting; empty or unchanged follows the setting.
+- **Subtitles** embeds subtitles for this download, defaulting to the
+  setting.
+
+These choices stay with the download across pause, retry and restarts, and
+the detail panel lists the ones that differ from the settings. For a
+playlist, `enter` queues every entry with the chosen settings; the clip fields
+are hidden there. Pasting several URLs at once offers to queue them all with the
 default format and resolution, without fetching details first. While the
 dialog is open, other keys are disabled; `ctrl+c` still quits.
 
@@ -455,6 +473,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Open files from the Finished tab on Windows
 - [x] Re-download finished videos (`R`)
 - [x] Desktop notifications for finished and failed downloads
+- [x] Per-download clip range, filename template and subtitles
 - [x] Mark several downloads (`space`, `V`) and start, pause, cancel, retry
       or remove them together
 
