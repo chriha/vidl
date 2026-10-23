@@ -17,8 +17,8 @@ downloads resume where they stopped.
 - **New-download dialog**: paste a URL (prefilled from the clipboard), see
   its title, uploader, duration and approximate size, pick a format and
   resolution, and queue it. Per download you can also download only a clip
-  (start and end time), use a different filename template, or turn embedded
-  subtitles on or off. Playlists queue every entry; pasting several URLs at
+  (start and end time), use a different filename template, turn embedded
+  subtitles on or off, or keep sponsor segments. Playlists queue every entry; pasting several URLs at
   once queues them all with the default settings.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
@@ -162,7 +162,7 @@ The UI has three tabs:
 Press `n` to add a download. If the clipboard holds a URL, it's already
 filled in; otherwise paste or type one and press `enter` to fetch its details.
 Move between the fields with `tab`/`shift+tab` or `↑`/`↓` (`j`/`k` outside
-text fields), change the file type, resolution and subtitles with `h`/`l`,
+text fields), change the file type, resolution, subtitles and sponsors with `h`/`l`,
 and type into the text fields. Then press `enter` to queue it, or `esc` to go
 back and edit the URL. Resolutions above the video's best are hidden, and
 audio formats ignore the resolution.
@@ -176,6 +176,9 @@ audio formats ignore the resolution.
   the setting; empty or unchanged follows the setting.
 - **Subtitles** embeds subtitles for this download, defaulting to the
   setting.
+- **Sponsors** removes the `sponsorblock_remove` categories from this
+  download (`remove`, the default) or keeps them (`keep`). It's only shown
+  when that setting is set.
 
 These choices stay with the download across pause, retry and restarts, and
 the detail panel lists the ones that differ from the settings. For a

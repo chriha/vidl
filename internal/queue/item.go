@@ -99,6 +99,9 @@ func (it *Item) clone() Item {
 	if it.Subtitles != nil {
 		c.Subtitles = new(*it.Subtitles)
 	}
+	if it.SponsorBlock != nil {
+		c.SponsorBlock = new(*it.SponsorBlock)
+	}
 	return c
 }
 
