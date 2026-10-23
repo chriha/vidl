@@ -92,6 +92,12 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	}
 }
 
+// Estimate blocks until the manager shuts down: UI tests don't need sizes.
+func (f *fakeRunner) Estimate(ctx context.Context, url string, format ytdlp.Format, resolution, cookies string) (*ytdlp.Estimate, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 func newTestModel(t *testing.T, concurrency int, urls ...string) (Model, *queue.Manager, *fakeRunner) {
 	t.Helper()
 	cfg := config.Default()

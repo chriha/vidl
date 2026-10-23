@@ -249,6 +249,14 @@ from the history never deletes their files.
 Downloads and Finished tabs and for downloads in any state. Only `http` and
 `https` URLs are opened, and marks are ignored.
 
+The Downloads tab's Size column shows the size yt-dlp reports once a download
+runs. Before that, vidl asks yt-dlp in the background (two at a time) how large
+each queued download will be with its format and resolution, and shows the
+estimate dimmed, e.g. `~412 MB`; for a clip it's scaled to the clip's length.
+The same lookup fills in a missing title, uploader and duration. If it fails,
+the size stays `–` and the reason is in the detail panel's log; it isn't
+retried until vidl starts again.
+
 The line above the help shows the total download speed and how many downloads
 are running, queued, paused, failed or cancelled. Short messages and errors
 appear in the bottom right corner for a few seconds. While downloading, the
@@ -519,6 +527,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Mark several downloads (`space`, `V`) and start, pause, cancel, retry
       or remove them together
 - [x] `vidl add` to queue URLs in a running vidl; single instance
+- [x] Estimated size for downloads that haven't started
 
 ## License
 
