@@ -59,10 +59,14 @@ type Item struct {
 	Size       int64          `json:"size,omitempty"` // of FilePath, once finished
 	Error      string         `json:"error,omitempty"`
 	PartFiles  []string       `json:"part_files,omitempty"`
-	Log        []string       `json:"-"`
+	Log        []string       `json:"log,omitempty"` // saved for failed items only
 	AddedAt    time.Time      `json:"added_at"`
 	StartedAt  time.Time      `json:"started_at,omitzero"`
 	FinishedAt time.Time      `json:"finished_at,omitzero"`
+
+	// EstimatedSize is yt-dlp's size estimate in bytes before the download
+	// starts; 0 when unknown. Progress.Total replaces it once known.
+	EstimatedSize int64 `json:"estimated_size,omitempty"`
 
 	// Per-download overrides; zero values follow the settings.
 	ClipStart time.Duration `json:"clip_start,omitempty"`
@@ -90,6 +94,16 @@ func (it *Item) clone() Item {
 	c.Log = slices.Clone(it.Log)
 	if it.Subtitles != nil {
 		c.Subtitles = new(*it.Subtitles)
+	}
+	return c
+}
+
+// saved is the copy that gets persisted: only a failed item keeps its
+// output, so the reason it failed survives a restart.
+func (it *Item) saved() Item {
+	c := it.clone()
+	if c.Status != Failed {
+		c.Log = nil
 	}
 	return c
 }

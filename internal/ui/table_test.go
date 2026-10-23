@@ -77,3 +77,29 @@ func TestFinishedRow(t *testing.T) {
 		}
 	}
 }
+
+func TestSizeLabel(t *testing.T) {
+	const mib = 1 << 20
+	tests := []struct {
+		name     string
+		item     queue.Item
+		want     string
+		estimate bool
+	}{
+		{"exact", queue.Item{Progress: ytdlp.Progress{Total: 2 * mib}}, "2.0 MiB", false},
+		{"exact beats estimate", queue.Item{Progress: ytdlp.Progress{Total: 2 * mib}, EstimatedSize: 3 * mib}, "2.0 MiB", false},
+		{"estimate", queue.Item{EstimatedSize: 3 * mib}, "~3.0 MiB", true},
+		{"unknown", queue.Item{}, "–", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, style := sizeLabel(tt.item)
+			if got != tt.want {
+				t.Errorf("label = %q, want %q", got, tt.want)
+			}
+			if dimmed := style.GetForeground() == dimStyle.GetForeground(); dimmed != tt.estimate {
+				t.Errorf("dimmed = %v, want %v", dimmed, tt.estimate)
+			}
+		})
+	}
+}

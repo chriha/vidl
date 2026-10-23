@@ -254,6 +254,10 @@ message.
   viewport is synced in `Update` (`syncLog`), never in `View`, and always
   jumps to the bottom. Terminals narrower than the tab bar (~31 columns)
   can't fit, so below 40×8 `render` shows a size message instead.
+- **Saved output**: `Item.Log` (last `maxLogLines` lines) is written to
+  queue.json as `log` for **failed items only** (`Item.saved` drops it for
+  every other status), so the reason survives a restart while running items
+  don't rewrite the file with live output. `startLocked` clears it on retry.
 - **New-download dialog**: probe results carry a request id (`probeSeq`) and
   are ignored unless they match the dialog's current probe, so a cancelled
   probe (`esc`) that returns late can't overwrite a newer one. Bubble Tea v2's
