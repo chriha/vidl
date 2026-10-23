@@ -39,6 +39,11 @@ type NewItem struct {
 	Extractor  string
 	Format     ytdlp.Format
 	Resolution string
+
+	// Optional overrides of the settings; zero values follow the settings.
+	Clip      ytdlp.Clip // single videos only
+	Template  string     // filename template
+	Subtitles *bool      // embed subtitles
 }
 
 // Manager owns the download queue and history. Queued items start

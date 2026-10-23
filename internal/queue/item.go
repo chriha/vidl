@@ -63,6 +63,12 @@ type Item struct {
 	AddedAt    time.Time      `json:"added_at"`
 	StartedAt  time.Time      `json:"started_at,omitzero"`
 	FinishedAt time.Time      `json:"finished_at,omitzero"`
+
+	// Per-download overrides; zero values follow the settings.
+	ClipStart time.Duration `json:"clip_start,omitempty"`
+	ClipEnd   time.Duration `json:"clip_end,omitempty"`  // zero for "until the end"
+	Template  string        `json:"template,omitempty"`  // filename template
+	Subtitles *bool         `json:"subtitles,omitempty"` // embed subtitles
 }
 
 // DisplayTitle is the title, or the URL while the title is still unknown.
@@ -71,6 +77,11 @@ func (it Item) DisplayTitle() string {
 		return it.Title
 	}
 	return it.URL
+}
+
+// Clip is the part of the video to download; zero for all of it.
+func (it Item) Clip() ytdlp.Clip {
+	return ytdlp.Clip{}
 }
 
 func (it *Item) clone() Item {
