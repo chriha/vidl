@@ -44,6 +44,9 @@ type NewItem struct {
 	Clip      ytdlp.Clip // single videos only
 	Template  string     // filename template
 	Subtitles *bool      // embed subtitles
+
+	// SponsorBlock false skips the sponsorblock_remove setting; nil follows it.
+	SponsorBlock *bool
 }
 
 // Manager owns the download queue and history. Queued items start

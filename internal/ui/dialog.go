@@ -42,6 +42,7 @@ const (
 	focusClipEnd   // single videos only
 	focusTemplate
 	focusSubtitles
+	focusSponsorBlock // only while the sponsorblock_remove setting is set
 )
 
 // playlistPreview is the number of playlist entries listed in the dialog.
@@ -87,6 +88,10 @@ type newDialog struct {
 	clipEnd     textinput.Model
 	template    textinput.Model // empty for the setting
 	subtitles   bool
+	// sponsorBlock removes the setting's SponsorBlock categories; the toggle
+	// is only offered when sponsorBlockShown.
+	sponsorBlock      bool
+	sponsorBlockShown bool
 
 	batch []string
 }
