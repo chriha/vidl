@@ -20,6 +20,23 @@ func matches(it queue.Item, query string) bool {
 		strings.Contains(strings.ToLower(it.URL), query)
 }
 
+// statusCycle is the order f steps through the status filter, after "all".
+var statusCycle = []queue.Status{queue.Downloading, queue.Queued, queue.Paused, queue.Failed, queue.Cancelled}
+
+// filterStatus keeps the items with statusCycle[i-1]; i == 0 keeps all.
+func filterStatus(items []queue.Item, i int) []queue.Item {
+	if i == 0 {
+		return items
+	}
+	var out []queue.Item
+	for _, it := range items {
+		if it.Status == statusCycle[i-1] {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
 func filterItems(items []queue.Item, query string) []queue.Item {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
@@ -41,7 +58,31 @@ func (m Model) hasTable() bool {
 
 // filtering reports whether the current tab shows the filter line.
 func (m Model) filtering() bool {
-	return m.hasTable() && (m.search != nil || strings.TrimSpace(m.filter[m.tab]) != "")
+	return m.hasTable() && (m.search != nil || strings.TrimSpace(m.filter[m.tab]) != "" || m.status[m.tab] != 0)
+}
+
+// statusLabel names the current tab's status filter, or "" for all.
+func (m Model) statusLabel() string {
+	if i := m.status[m.tab]; i > 0 {
+		return statusCycle[i-1].String()
+	}
+	return ""
+}
+
+// cycleStatus steps the Downloads tab's status filter, keeping the cursor on
+// the selected item while it still matches.
+func (m *Model) cycleStatus() {
+	if m.tab != tabDownloads {
+		return
+	}
+	m.status[m.tab] = (m.status[m.tab] + 1) % (len(statusCycle) + 1)
+	m.follow()
+}
+
+// clearFilters clears the current tab's search and status filters.
+func (m *Model) clearFilters() {
+	m.status[m.tab] = 0
+	m.setFilter("")
 }
 
 // openSearch shows the filter input for the current tab, starting from its
@@ -99,7 +140,10 @@ func (m Model) filterLine() string {
 	if m.tab == tabFinished {
 		total = len(m.history)
 	}
-	line := searchPromptStyle.Render(" / ") + m.filter[m.tab] +
-		dimStyle.Render(fmt.Sprintf("  %d of %d · esc clear", len(m.items()), total))
+	line := searchPromptStyle.Render(" / ") + m.filter[m.tab]
+	if label := m.statusLabel(); label != "" {
+		line += "  " + searchPromptStyle.Render("["+label+"]")
+	}
+	line += dimStyle.Render(fmt.Sprintf("  %d of %d · esc clear", len(m.items()), total))
 	return ansi.Truncate(line, m.width, "…")
 }

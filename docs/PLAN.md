@@ -210,7 +210,9 @@ whenever the toast's `seq` changes, and a stale tick (older `seq`) is
 ignored. `report(nil)` dismisses an error toast, so a successful action
 clears a previous error. The status line above the help shows counts and
 total speed; the queue save error stays as a sticky red line above it.
-Search keeps one query per tab in `m.filter`; `tabItems` applies it, so
+Search keeps one query per tab in `m.filter`, and `m.status` holds the `f`
+status filter (an index into `statusCycle`, Downloads tab only); `tabItems`
+applies both, so
 cursor, scrolling and every action work on the filtered list, while the `#`
 column keeps the real queue position. `confirmation` is a generic y/n dialog
 (remove, clear history). `o`/`O` go through the injected `Model.open`

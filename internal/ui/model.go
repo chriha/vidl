@@ -81,6 +81,7 @@ type Model struct {
 	toast   toast
 
 	filter [tabCount]string // search query per tab
+	status [tabCount]int    // status filter per tab: 0 all, else statusCycle[i-1]
 	search *textinput.Model // filter input, nil when closed
 	open   opener
 
@@ -279,6 +280,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, m.openSelected(true)
 	case key.Matches(msg, k.Search):
 		return m, m.openSearch()
+	case key.Matches(msg, k.StatusFilter):
+		m.cycleStatus()
 	case key.Matches(msg, k.New):
 		return m, m.openDialog()
 	case key.Matches(msg, k.Detail):
@@ -289,7 +292,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if m.detail {
 			m.detail = false
 		} else if m.filtering() {
-			m.setFilter("")
+			m.clearFilters()
 		}
 	}
 	return m, nil
@@ -391,7 +394,7 @@ func (m Model) retry(id string) error {
 func (m Model) tabItems(t tab) []queue.Item {
 	switch t {
 	case tabDownloads:
-		return filterItems(m.queue, m.filter[t])
+		return filterItems(filterStatus(m.queue, m.status[t]), m.filter[t])
 	case tabFinished:
 		return filterItems(m.history, m.filter[t])
 	}

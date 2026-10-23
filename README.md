@@ -27,7 +27,8 @@ downloads resume where they stopped.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads: open a file or show it in
   its folder, and clear the history.
-- **Search** to filter downloads and history by title or URL.
+- **Search** to filter downloads and history by title or URL, and a status
+  filter for the queue.
 - **Status line** with the total speed and the number of downloads per
   status, and the overall progress in the terminal's window title.
 - **Detail panel** for any download: source, format, progress per stream,
@@ -164,6 +165,12 @@ and returns to the list, `esc` clears it. Actions apply to the filtered list,
 and `X` on a filtered Finished tab removes only the matching downloads from
 the history.
 
+On the Downloads tab, `f` cycles a status filter: all, downloading, queued,
+paused, failed, cancelled, and back to all. It combines with the search (a
+download must match both), and the line above the table shows it, e.g.
+`/ foo  [failed]  3 of 12`. `esc` clears the search and the status filter
+together.
+
 On the Finished tab, `o` opens a file with its default application and `O`
 shows it in Finder (macOS), selects it in Explorer (Windows) or opens its
 folder (Linux). Removing downloads
@@ -198,8 +205,9 @@ automatically the next time you start vidl.
 | `u` / `d`             | Move queued download up / down                      |
 | `r`                   | Remove (asks for confirmation)                      |
 | `enter`               | Toggle the detail panel                             |
-| `esc`                 | Close the detail panel, then clear the search       |
+| `esc`                 | Close the detail panel, then clear the filters      |
 | `/`                   | Search the current tab by title or URL              |
+| `f`                   | Cycle the status filter (Downloads tab)             |
 | `o`                   | Open the file (Finished tab)                        |
 | `O`                   | Show the file in its folder (Finished tab)          |
 | `X`                   | Clear finished history (asks for confirmation)      |
@@ -401,6 +409,7 @@ directly to see whether the problem is the site or vidl.
       progress, small-terminal handling
 - [x] Release: MIT license, CI, release binaries, `go install`, pause and
       cancel on Windows
+- [x] Status filter on the Downloads tab (`f`)
 - [x] Open files from the Finished tab on Windows
 
 ## License
