@@ -26,10 +26,16 @@ import (
 // version is set at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
-const usage = `Usage: vidl [url...]
+const usage = `Usage:
+  vidl [url...]       open the UI and queue the given URLs
+  vidl add <url>...   queue URLs in the running vidl
 
-A terminal UI for downloading videos with yt-dlp. URLs given as arguments
-are added to the download queue.
+A terminal UI for downloading videos with yt-dlp.
+
+Only one vidl runs at a time. While it runs, "vidl <url>" and "vidl add <url>"
+hand the URLs to it over a local socket (vidl.sock in the config dir) and
+exit. With no vidl running, "vidl add" appends the URLs to the saved queue,
+and they start the next time vidl opens.
 
 Options:
   -h, --help     show this help
@@ -49,14 +55,46 @@ func main() {
 		}
 	}
 	if err := run(os.Args[1:], os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "vidl:", err)
+		if errors.Is(err, ipc.ErrRunning) {
+			fmt.Fprintln(os.Stderr, err) // "vidl is already running"
+		} else {
+			fmt.Fprintln(os.Stderr, "vidl:", err)
+		}
 		os.Exit(1)
 	}
 }
 
 // run starts the UI or hands args to a running vidl; messages for the user
 // go to out.
-func run(urls []string, out io.Writer) error {
+func run(args []string, out io.Writer) error {
+	dir, err := config.Dir()
+	if err != nil {
+		return err
+	}
+	if len(args) > 0 && args[0] == "add" {
+		return add(dir, args[1:], out)
+	}
+	store := queue.FileStore{Path: filepath.Join(dir, "queue.json")}
+	lock, err := store.Lock()
+	if errors.Is(err, queue.ErrLocked) {
+		if len(args) == 0 {
+			return ipc.ErrRunning
+		}
+		err := forward(dir, args, out)
+		if errors.Is(err, ipc.ErrNoServer) {
+			return notAnswering(dir, store)
+		}
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("lock %s: %w", store.LockPath(), err)
+	}
+	return errors.Join(runUI(dir, store, args), lock.Release())
+}
+
+// runUI runs the UI while this process holds the queue lock, serving
+// `vidl add` on the socket for its lifetime.
+func runUI(dir string, store queue.FileStore, urls []string) error {
 	var missing []string
 	for _, bin := range []string{"yt-dlp", "ffmpeg"} {
 		if _, err := exec.LookPath(bin); err != nil {
@@ -67,10 +105,6 @@ func run(urls []string, out io.Writer) error {
 		return fmt.Errorf("%v not found on PATH; %s", missing, installHint(runtime.GOOS))
 	}
 
-	dir, err := config.Dir()
-	if err != nil {
-		return err
-	}
 	cfgPath := filepath.Join(dir, "config.toml")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -84,7 +118,7 @@ func run(urls []string, out io.Writer) error {
 	}
 
 	runner := ytdlp.Runner{}
-	mgr, err := queue.New(cfg, runner, queue.FileStore{Path: filepath.Join(dir, "queue.json")})
+	mgr, err := queue.New(cfg, runner, store)
 	if err != nil {
 		return fmt.Errorf("loading queue: %w", err)
 	}
@@ -94,15 +128,51 @@ func run(urls []string, out io.Writer) error {
 	}
 	mgr.Add(reqs...)
 
-	_, runErr := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version).WithNotifier(notify.System{})).Run()
-	closeErr := mgr.Close()
-	return errors.Join(runErr, closeErr)
+	p := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version).WithNotifier(notify.System{}))
+	stopServer := serveAdds(dir, p.Send)
+	_, runErr := p.Run()
+	return errors.Join(runErr, stopServer(), mgr.Close())
 }
+
+// serveAdds listens for `vidl add` and hands the URLs to the UI through
+// send. A socket that can't be opened is reported in the UI, which runs
+// anyway. The returned func stops the server.
+func serveAdds(dir string, send func(tea.Msg)) (stop func() error) {
+	srv, err := ipc.Listen(ipc.SocketPath(dir), forwardToUI(send, handoffTimeout))
+	if err != nil {
+		// send blocks until the UI loop runs, which starts after this returns.
+		go send(ui.ErrorMsg{Err: fmt.Errorf("vidl add is unavailable: %w", err)})
+		return func() error { return nil }
+	}
+	srv.OnError = func(err error) { send(ui.ErrorMsg{Err: fmt.Errorf("vidl add: %w", err)}) }
+	done := make(chan struct{})
+	go func() {
+		srv.Serve()
+		close(done)
+	}()
+	return func() error {
+		err := srv.Close()
+		<-done
+		return err
+	}
+}
+
+// handoffTimeout bounds how long the socket handler waits for the UI loop;
+// it stays below ipc.DefaultTimeout so the client still gets the reply.
+const handoffTimeout = ipc.DefaultTimeout / 2
 
 // forwardToUI returns the socket handler of the running instance: it passes
 // the URLs to the UI loop through send and waits up to timeout for the count.
+// send returns once the UI took the message or the program has ended.
 func forwardToUI(send func(tea.Msg), timeout time.Duration) ipc.Handler {
 	return func(urls []string) (int, error) {
-		return 0, errors.New("not implemented")
+		added := make(chan int, 1)
+		go send(ui.AddURLsMsg{URLs: urls, Added: added})
+		select {
+		case n := <-added:
+			return n, nil
+		case <-time.After(timeout):
+			return 0, errors.New("the vidl UI did not respond")
+		}
 	}
 }
