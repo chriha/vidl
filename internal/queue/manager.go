@@ -444,6 +444,7 @@ func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 		CookiesFromBrowser: c.CookiesFromBrowser,
 		Clip:               it.Clip(),
 		ForceOverwrites:    it.redownload(),
+		SponsorBlockRemove: c.SponsorBlockRemove,
 	}
 }
 
@@ -541,10 +542,10 @@ func applyEvent(it *Item, ev ytdlp.Event) {
 func (m *Manager) saveLocked() {
 	st := State{}
 	for _, it := range m.queue {
-		st.Queue = append(st.Queue, it.clone())
+		st.Queue = append(st.Queue, it.saved())
 	}
 	for _, it := range m.history {
-		st.History = append(st.History, it.clone())
+		st.History = append(st.History, it.saved())
 	}
 	m.saveErr = m.store.Save(st)
 }

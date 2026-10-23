@@ -21,12 +21,13 @@ type fakeRunner struct {
 	results map[string]chan error
 	parts   map[string][]string  // url -> files reported as being written
 	files   map[string]string    // url -> final path, instead of /dl/<url>.mp4
+	logs    map[string][]string  // url -> output lines printed before blocking
 	jobs    map[string]ytdlp.Job // url -> most recent job
 	started chan string
 }
 
 func newFakeRunner() *fakeRunner {
-	return &fakeRunner{results: map[string]chan error{}, parts: map[string][]string{}, files: map[string]string{}, jobs: map[string]ytdlp.Job{}, started: make(chan string, 100)}
+	return &fakeRunner{results: map[string]chan error{}, parts: map[string][]string{}, files: map[string]string{}, logs: map[string][]string{}, jobs: map[string]ytdlp.Job{}, started: make(chan string, 100)}
 }
 
 func (f *fakeRunner) result(url string) chan error {
@@ -43,8 +44,12 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	f.mu.Lock()
 	parts := f.parts[job.URL]
 	file := f.files[job.URL]
+	logs := f.logs[job.URL]
 	f.jobs[job.URL] = job
 	f.mu.Unlock()
+	for _, line := range logs {
+		onEvent(ytdlp.Event{Kind: ytdlp.EventLog, Line: line})
+	}
 	if file == "" {
 		file = "/dl/" + job.URL + ".mp4"
 	}
@@ -360,6 +365,105 @@ func TestFailureAndRetry(t *testing.T) {
 	}
 }
 
+// savedItem returns the item with id from the store's last saved state.
+func savedItem(t *testing.T, m *Manager, store *MemStore, id string) Item {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, it := range slices.Concat(store.State.Queue, store.State.History) {
+		if it.ID == id {
+			return it
+		}
+	}
+	t.Fatalf("item %s not saved", id)
+	return Item{}
+}
+
+func setLogs(r *fakeRunner, url string, lines ...string) {
+	r.mu.Lock()
+	r.logs[url] = lines
+	r.mu.Unlock()
+}
+
+func TestFailedDownloadSavesLog(t *testing.T) {
+	store := &MemStore{}
+	m, r := newManager(t, 1, store)
+	lines := []string{"[youtube] abc: Downloading webpage", "ERROR: [youtube] abc: HTTP Error 403"}
+	setLogs(r, "a", lines...)
+	id := add(m, "a")[0]
+	r.waitStarted(t, "a")
+	r.finish("a", errors.New("HTTP Error 403"))
+	waitStatus(t, m, id, Failed)
+	if got := savedItem(t, m, store, id).Log; !equal(got, lines) {
+		t.Errorf("saved log = %q, want %q", got, lines)
+	}
+
+	setLogs(r, "a")
+	m.Start(id)
+	r.waitStarted(t, "a")
+	if got := savedItem(t, m, store, id).Log; got != nil {
+		t.Errorf("saved log after retry = %q, want none", got)
+	}
+}
+
+func TestFailedDownloadLogSurvivesRestart(t *testing.T) {
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	m, r := newManager(t, 1, store)
+	lines := []string{"line 1", "ERROR: line 2"}
+	setLogs(r, "a", lines...)
+	id := add(m, "a")[0]
+	r.waitStarted(t, "a")
+	r.finish("a", errors.New("boom"))
+	waitStatus(t, m, id, Failed)
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	m2, _ := newManager(t, 1, store)
+	if it, _ := m2.Get(id); !equal(it.Log, lines) {
+		t.Errorf("log after restart = %q, want %q", it.Log, lines)
+	}
+}
+
+func TestOnlyFailedDownloadsSaveLog(t *testing.T) {
+	store := &MemStore{}
+	m, r := newManager(t, 1, store)
+	for _, u := range []string{"f", "p", "q", "d"} {
+		setLogs(r, u, "output of "+u)
+	}
+	ids := add(m, "f", "p", "q", "d")
+	r.waitStarted(t, "f")
+	r.finish("f", nil)
+	waitStatus(t, m, ids[0], Finished)
+	r.waitStarted(t, "p")
+	m.Pause(ids[1])
+	r.waitStarted(t, "q")
+	m.Pause(ids[2])
+	r.waitStarted(t, "d")
+	m.Requeue(ids[2]) // waits: d holds the only slot
+
+	tests := []struct {
+		name string
+		id   string
+		want Status
+	}{
+		{"finished", ids[0], Finished},
+		{"paused", ids[1], Paused},
+		{"queued", ids[2], Queued},
+		{"downloading", ids[3], Downloading},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if it, _ := m.Get(tt.id); it.Status != tt.want || len(it.Log) == 0 {
+				t.Fatalf("setup: status %v with %d log lines, want %v with output", it.Status, len(it.Log), tt.want)
+			}
+			if got := savedItem(t, m, store, tt.id).Log; got != nil {
+				t.Errorf("saved log = %q, want none", got)
+			}
+		})
+	}
+}
+
 func TestMove(t *testing.T) {
 	m, r := newManager(t, 1, &MemStore{})
 	ids := add(m, "a", "b", "c", "d")
@@ -437,6 +541,31 @@ func TestPersistenceAcrossRestart(t *testing.T) {
 	_, history := m2.Snapshot()
 	if len(history) != 1 || history[0].ID != ids[0] {
 		t.Errorf("history = %+v", history)
+	}
+}
+
+func TestEstimatedSizePersists(t *testing.T) {
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	want := State{Queue: []Item{{ID: "a", URL: "a", EstimatedSize: 432013312}}}
+	if err := store.Save(want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Queue) != 1 || got.Queue[0].EstimatedSize != 432013312 {
+		t.Errorf("queue = %+v", got.Queue)
+	}
+}
+
+func TestLoadWithoutEstimatedSize(t *testing.T) {
+	got, err := FileStore{Path: "testdata/queue_legacy.json"}.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Queue) != 1 || got.Queue[0].URL != "a" || got.Queue[0].EstimatedSize != 0 {
+		t.Errorf("queue = %+v", got.Queue)
 	}
 }
 
@@ -571,6 +700,22 @@ func TestSetConfigRaisesConcurrency(t *testing.T) {
 	cfg.Concurrency = 2
 	m.SetConfig(cfg)
 	r.waitStarted(t, "b")
+}
+
+func TestJobUsesSponsorBlockSetting(t *testing.T) {
+	for _, categories := range []string{"", "sponsor,selfpromo"} {
+		t.Run(categories, func(t *testing.T) {
+			m, r := newManager(t, 1, &MemStore{})
+			cfg := m.Config()
+			cfg.SponsorBlockRemove = categories
+			m.SetConfig(cfg)
+			add(m, "a")
+			r.waitStarted(t, "a")
+			if got := r.job("a").SponsorBlockRemove; got != categories {
+				t.Errorf("job SponsorBlockRemove = %q, want %q", got, categories)
+			}
+		})
+	}
 }
 
 // overrides are the per-download settings a job was run with.

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/vidl/internal/queue"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 func TestDetailToggle(t *testing.T) {
@@ -162,5 +163,32 @@ func assertFits(t *testing.T, m Model) {
 	}
 	if h := strings.Count(out, "\n") + 1; h > m.height {
 		t.Errorf("%dx%d: render height %d", m.width, m.height, h)
+	}
+}
+
+func TestDetailSizeField(t *testing.T) {
+	const mib = 1 << 20
+	tests := []struct {
+		name string
+		item queue.Item
+		want string // "" for no Size line
+	}{
+		{"queued with estimate", queue.Item{URL: "a", Status: queue.Queued, EstimatedSize: 3 * mib}, "Size      ~3.0 MiB (estimate)"},
+		{"queued without estimate", queue.Item{URL: "a", Status: queue.Queued}, ""},
+		{"total known", queue.Item{URL: "a", Status: queue.Downloading, EstimatedSize: 3 * mib, Progress: ytdlp.Progress{Total: 2 * mib}}, ""},
+		{"finished", queue.Item{URL: "a", Status: queue.Finished, EstimatedSize: 3 * mib, Size: 2 * mib}, "Size      2.0 MiB"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got string
+			for _, l := range (Model{}).detailFields(tt.item, 200) {
+				if l = ansi.Strip(l); strings.HasPrefix(l, "Size") {
+					got = l
+				}
+			}
+			if got != tt.want {
+				t.Errorf("Size line = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
