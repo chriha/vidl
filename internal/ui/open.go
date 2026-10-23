@@ -111,3 +111,12 @@ func (m *Model) openSelected(reveal bool) tea.Cmd {
 	open, path := m.open, it.FilePath
 	return func() tea.Msg { return openedMsg{open(path, reveal)} }
 }
+
+// browser opens url in the default web browser.
+type browser func(url string) error
+
+// systemBrowse opens url in the default web browser.
+func systemBrowse(url string) error { return errors.New("not implemented") }
+
+// browseSelected opens the source URL of the selected download.
+func (m *Model) browseSelected() tea.Cmd { return nil }
