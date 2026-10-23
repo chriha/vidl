@@ -24,10 +24,84 @@ type fakeRunner struct {
 	logs    map[string][]string  // url -> output lines printed before blocking
 	jobs    map[string]ytdlp.Job // url -> most recent job
 	started chan string
+
+	// Estimates block until the test answers them via answerEstimate(url).
+	estimates  map[string]chan estimateResult
+	estCalls   map[string]estimateCall // url -> arguments of the most recent estimate
+	estimating chan string
+}
+
+type estimateResult struct {
+	est *ytdlp.Estimate
+	err error
+}
+
+type estimateCall struct {
+	Format     ytdlp.Format
+	Resolution string
+	Cookies    string
 }
 
 func newFakeRunner() *fakeRunner {
-	return &fakeRunner{results: map[string]chan error{}, parts: map[string][]string{}, files: map[string]string{}, logs: map[string][]string{}, jobs: map[string]ytdlp.Job{}, started: make(chan string, 100)}
+	return &fakeRunner{results: map[string]chan error{}, parts: map[string][]string{}, files: map[string]string{}, logs: map[string][]string{}, jobs: map[string]ytdlp.Job{}, started: make(chan string, 100),
+		estimates: map[string]chan estimateResult{}, estCalls: map[string]estimateCall{}, estimating: make(chan string, 100)}
+}
+
+func (f *fakeRunner) estimateResult(url string) chan estimateResult {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.estimates[url] == nil {
+		f.estimates[url] = make(chan estimateResult, 1)
+	}
+	return f.estimates[url]
+}
+
+func (f *fakeRunner) Estimate(ctx context.Context, url string, format ytdlp.Format, resolution, cookies string) (*ytdlp.Estimate, error) {
+	res := f.estimateResult(url)
+	f.mu.Lock()
+	f.estCalls[url] = estimateCall{format, resolution, cookies}
+	f.mu.Unlock()
+	f.estimating <- url
+	select {
+	case r := <-res:
+		return r.est, r.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (f *fakeRunner) answerEstimate(url string, est *ytdlp.Estimate, err error) {
+	f.estimateResult(url) <- estimateResult{est, err}
+}
+
+// waitEstimating waits until exactly the given estimates have started, in
+// any order.
+func (f *fakeRunner) waitEstimating(t *testing.T, urls ...string) {
+	t.Helper()
+	want := map[string]bool{}
+	for _, u := range urls {
+		want[u] = true
+	}
+	for range urls {
+		select {
+		case got := <-f.estimating:
+			if !want[got] {
+				t.Fatalf("estimating %q, want one of %v", got, urls)
+			}
+			delete(want, got)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%v not estimated", want)
+		}
+	}
+}
+
+func (f *fakeRunner) assertNoEstimate(t *testing.T) {
+	t.Helper()
+	select {
+	case got := <-f.estimating:
+		t.Fatalf("unexpected estimate of %q", got)
+	case <-time.After(50 * time.Millisecond):
+	}
 }
 
 func (f *fakeRunner) result(url string) chan error {
@@ -913,4 +987,207 @@ func equal(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// queuedBehindBusy returns a manager whose only download slot is taken by
+// "busy", so items added after it stay queued and get estimated.
+func queuedBehindBusy(t *testing.T, store Store) (*Manager, *fakeRunner) {
+	t.Helper()
+	m, r := newManager(t, 1, store)
+	add(m, "busy")
+	r.waitStarted(t, "busy")
+	return m, r
+}
+
+func estimatedSize(m *Manager, id string) int64 {
+	it, _ := m.Get(id)
+	return it.EstimatedSize
+}
+
+func TestEstimateUsesItemSelectorAndCookies(t *testing.T) {
+	m, r := queuedBehindBusy(t, &MemStore{})
+	cfg := m.Config()
+	cfg.CookiesFromBrowser = "firefox"
+	m.SetConfig(cfg)
+	m.Add(NewItem{URL: "a", Format: ytdlp.MKV, Resolution: "720"})
+	r.waitEstimating(t, "a")
+	r.mu.Lock()
+	got := r.estCalls["a"]
+	r.mu.Unlock()
+	if want := (estimateCall{ytdlp.MKV, "720", "firefox"}); got != want {
+		t.Errorf("estimate call = %+v, want %+v", got, want)
+	}
+}
+
+func TestEstimateSetsSizeAndSaves(t *testing.T) {
+	store := &MemStore{}
+	m, r := queuedBehindBusy(t, store)
+	id := add(m, "a")[0]
+	r.waitEstimating(t, "a")
+	r.answerEstimate("a", &ytdlp.Estimate{Size: 412_000_000}, nil)
+	waitFor(t, "estimate", func() bool { return estimatedSize(m, id) == 412_000_000 })
+	if got := savedItem(t, m, store, id).EstimatedSize; got != 412_000_000 {
+		t.Errorf("saved estimate = %d", got)
+	}
+}
+
+func TestEstimateFillsOnlyEmptyMetadata(t *testing.T) {
+	est := &ytdlp.Estimate{Size: 1, Title: "new title", Uploader: "new uploader", Duration: 60, Extractor: "Youtube"}
+	tests := []struct {
+		name string
+		req  NewItem
+		want NewItem
+	}{
+		{"empty fields are filled", NewItem{URL: "a"},
+			NewItem{URL: "a", Title: "new title", Uploader: "new uploader", Duration: 60, Extractor: "Youtube"}},
+		{"set fields are kept", NewItem{URL: "a", Title: "t", Uploader: "u", Duration: 5, Extractor: "Vimeo"},
+			NewItem{URL: "a", Title: "t", Uploader: "u", Duration: 5, Extractor: "Vimeo"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, r := queuedBehindBusy(t, &MemStore{})
+			id := m.Add(tt.req)[0]
+			r.waitEstimating(t, "a")
+			r.answerEstimate("a", est, nil)
+			waitFor(t, "estimate", func() bool { return estimatedSize(m, id) == 1 })
+			it, _ := m.Get(id)
+			got := NewItem{URL: it.URL, Title: it.Title, Uploader: it.Uploader, Duration: it.Duration, Extractor: it.Extractor}
+			if got != tt.want {
+				t.Errorf("item = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEstimateFailureIsLoggedAndNotRetried(t *testing.T) {
+	tests := []struct {
+		name string
+		est  *ytdlp.Estimate
+		err  error
+		want string
+	}{
+		{"yt-dlp error", nil, errors.New("Unsupported URL"), "Unsupported URL"},
+		{"no size", &ytdlp.Estimate{Title: "t"}, nil, "no size"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, r := queuedBehindBusy(t, &MemStore{})
+			id := add(m, "a")[0]
+			r.waitEstimating(t, "a")
+			r.answerEstimate("a", tt.est, tt.err)
+			waitFor(t, "log line", func() bool {
+				it, _ := m.Get(id)
+				return len(it.Log) > 0
+			})
+			it, _ := m.Get(id)
+			if !strings.Contains(it.Log[0], tt.want) || it.EstimatedSize != 0 {
+				t.Errorf("log = %q, estimate = %d; want a line with %q and no estimate", it.Log, it.EstimatedSize, tt.want)
+			}
+
+			add(m, "b") // schedules estimates again
+			r.waitEstimating(t, "b")
+			r.assertNoEstimate(t)
+		})
+	}
+}
+
+func TestAtMostTwoEstimatesInQueueOrder(t *testing.T) {
+	m, r := queuedBehindBusy(t, &MemStore{})
+	ids := add(m, "a", "b", "c", "d")
+	r.waitEstimating(t, "a", "b")
+	r.assertNoEstimate(t)
+
+	r.answerEstimate("b", &ytdlp.Estimate{Size: 1}, nil)
+	r.waitEstimating(t, "c")
+	r.assertNoEstimate(t)
+	if estimatedSize(m, ids[1]) != 1 {
+		t.Errorf("b estimate = %d", estimatedSize(m, ids[1]))
+	}
+}
+
+func TestStartedItemsAreNotEstimated(t *testing.T) {
+	m, r := newManager(t, 1, &MemStore{})
+	add(m, "a")
+	r.waitStarted(t, "a")
+	r.assertNoEstimate(t)
+}
+
+func TestEstimateOfRemovedItemIsDiscarded(t *testing.T) {
+	store := &MemStore{}
+	m, r := queuedBehindBusy(t, store)
+	ids := add(m, "a", "b", "c")
+	r.waitEstimating(t, "a", "b")
+	if err := m.Remove(ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	r.answerEstimate("a", &ytdlp.Estimate{Size: 1}, nil)
+	r.waitEstimating(t, "c") // a's slot is free again
+	if _, ok := m.Get(ids[0]); ok {
+		t.Error("removed item is back")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, it := range store.State.Queue {
+		if it.ID == ids[0] {
+			t.Error("removed item saved")
+		}
+	}
+}
+
+func TestRestoredItemsAreEstimated(t *testing.T) {
+	store := &MemStore{State: State{Queue: []Item{
+		{ID: "1", URL: "busy", Status: Queued},
+		{ID: "2", URL: "new", Status: Queued},
+		{ID: "3", URL: "known", Status: Queued, EstimatedSize: 5},
+	}}}
+	_, r := newManager(t, 1, store)
+	r.waitStarted(t, "busy")
+	r.waitEstimating(t, "new")
+	r.assertNoEstimate(t)
+}
+
+func TestCloseStopsEstimates(t *testing.T) {
+	m, r := queuedBehindBusy(t, &MemStore{})
+	id := add(m, "a")[0]
+	r.waitEstimating(t, "a")
+	done := make(chan error)
+	go func() { done <- m.Close() }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not stop the estimate")
+	}
+	if it, _ := m.Get(id); len(it.Log) != 0 {
+		t.Errorf("log = %q, want nothing for a stopped estimate", it.Log)
+	}
+}
+
+func TestClipScalesEstimate(t *testing.T) {
+	tests := []struct {
+		name     string
+		clip     ytdlp.Clip
+		duration float64
+		want     int64
+	}{
+		{"no clip", ytdlp.Clip{}, 0, 1000},
+		{"clip", ytdlp.Clip{Start: 10 * time.Second, End: 35 * time.Second}, 100, 250},
+		{"open end", ytdlp.Clip{Start: 60 * time.Second}, 100, 400},
+		{"end past duration", ytdlp.Clip{Start: 50 * time.Second, End: 500 * time.Second}, 100, 500},
+		{"unknown duration", ytdlp.Clip{Start: time.Second}, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, r := queuedBehindBusy(t, &MemStore{})
+			id := m.Add(NewItem{URL: "a", Clip: tt.clip})[0]
+			r.waitEstimating(t, "a")
+			r.answerEstimate("a", &ytdlp.Estimate{Size: 1000, Duration: tt.duration}, nil)
+			waitFor(t, "estimate result", func() bool {
+				it, _ := m.Get(id)
+				return it.EstimatedSize != 0 || len(it.Log) > 0
+			})
+			if got := estimatedSize(m, id); got != tt.want {
+				t.Errorf("estimate = %d, want %d", got, tt.want)
+			}
+		})
+	}
 }

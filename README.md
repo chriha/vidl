@@ -43,6 +43,9 @@ downloads resume where they stopped.
   subtitle overrides, progress per stream, timestamps, output and partial
   files, errors, and yt-dlp's latest output
   for running or failed downloads.
+- **Error view** (`i`) for a failed download: the full error and yt-dlp's
+  output, full-screen and scrollable. Failed downloads keep their last 200
+  output lines across restarts.
 - **Desktop notifications** when a download finishes or fails. Downloads
   ending within about two seconds of each other share one notification.
 - **`vidl add`** hands URLs to the running vidl from scripts or browser
@@ -249,6 +252,14 @@ from the history never deletes their files.
 Downloads and Finished tabs and for downloads in any state. Only `http` and
 `https` URLs are opened, and marks are ignored.
 
+The Downloads tab's Size column shows the size yt-dlp reports once a download
+runs. Before that, vidl asks yt-dlp in the background (two at a time) how large
+each queued download will be with its format and resolution, and shows the
+estimate dimmed, e.g. `~412 MB`; for a clip it's scaled to the clip's length.
+The same lookup fills in a missing title, uploader and duration. If it fails,
+the size stays `–` and the reason is in the detail panel's log; it isn't
+retried until vidl starts again.
+
 The line above the help shows the total download speed and how many downloads
 are running, queued, paused, failed or cancelled. Short messages and errors
 appear in the bottom right corner for a few seconds. While downloading, the
@@ -279,6 +290,7 @@ automatically the next time you start vidl.
 | `u` / `d`             | Move queued download up / down                      |
 | `r`                   | Remove (asks for confirmation)                      |
 | `enter`               | Toggle the detail panel                             |
+| `i`                   | Show why the download failed (`esc`/`i`/`q` close)  |
 | `space`               | Mark or unmark the download (actions apply to all)  |
 | `V`                   | Mark all visible downloads, or unmark them all      |
 | `esc`                 | Close the detail panel, then clear marks, filters   |
@@ -503,6 +515,7 @@ directly to see whether the problem is the site or vidl.
 - [x] UI scaffold: tabs, navigation, help
 - [x] Downloads and Finished tables with progress bars, speed and ETA
 - [x] Detail panel (`enter`)
+- [x] Error view for failed downloads (`i`)
 - [x] New-download dialog with format and resolution selection, playlist
       expansion and multi-URL paste
 - [x] Settings tab
@@ -519,6 +532,7 @@ directly to see whether the problem is the site or vidl.
       or remove them together
 - [x] `vidl add` to queue URLs in a running vidl; single instance
 - [x] Hold the queue (`P`): running downloads finish, nothing new starts
+- [x] Estimated size for downloads that haven't started
 
 ## License
 
