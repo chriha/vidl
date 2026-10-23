@@ -30,6 +30,7 @@ type dialogStep int
 const (
 	stepInput dialogStep = iota
 	stepProbing
+	stepEntries // playlist checklist, before the details
 	stepDetails
 	stepBatch // several pasted URLs, queued with defaults
 )
@@ -45,8 +46,17 @@ const (
 	focusSponsorBlock // only while the sponsorblock_remove setting is set
 )
 
-// playlistPreview is the number of playlist entries listed in the dialog.
+// playlistPreview is the number of pasted URLs listed in the batch step.
 const playlistPreview = 5
+
+// maxEntryRows is the most entries the checklist shows at once; entriesChrome
+// are the other lines it needs: border, header, scroll markers, error, hint.
+const (
+	maxEntryRows  = 10
+	entriesChrome = 11
+)
+
+var errNoEntries = errors.New("select at least one entry")
 
 // fieldLabelW is the width of the field labels in the details step.
 const fieldLabelW = 11
@@ -92,6 +102,12 @@ type newDialog struct {
 	// is only offered when sponsorBlockShown.
 	sponsorBlock      bool
 	sponsorBlockShown bool
+
+	// Playlist checklist: which entries are checked, the cursor and the
+	// first visible row.
+	checked []bool
+	cursor  int
+	top     int
 
 	batch []string
 }
@@ -189,6 +205,9 @@ func (m Model) handleDialogMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, d.input.Focus()
 		}
 		d.showDetails(msg.info, m.mgr.Config())
+		if msg.info.IsPlaylist {
+			d.showEntries(len(msg.info.Entries))
+		}
 	case spinner.TickMsg:
 		if d.step == stepProbing {
 			d.spinner, cmd = d.spinner.Update(msg)
@@ -228,6 +247,8 @@ func (m Model) handleDialogKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			d.cancel, d.step = nil, stepInput
 			return m, d.input.Focus()
 		}
+	case stepEntries:
+		m.handleEntriesKey(msg.String())
 	case stepDetails:
 		return m.handleDetailsKey(msg)
 	case stepBatch:
@@ -255,6 +276,8 @@ func (m Model) handleDetailsKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		d.err = nil // shown until the next edit or move
 	}
 	switch {
+	case k == "esc" && d.info.IsPlaylist:
+		d.step = stepEntries
 	case k == "esc":
 		d.focus = focusFormat
 		d.focusField()
@@ -280,6 +303,74 @@ func (m Model) handleDetailsKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		d.change(1)
 	}
 	return m, nil
+}
+
+// handleEntriesKey handles keys in the playlist checklist.
+func (m *Model) handleEntriesKey(k string) {
+	d := m.dialog
+	d.err = nil
+	rows := m.entriesRows()
+	last := len(d.checked) - 1
+	switch k {
+	case "esc":
+		d.step = stepInput
+		d.input.Focus()
+		return
+	case "enter":
+		if checkedCount(d.checked) == 0 {
+			d.err = errNoEntries
+			return
+		}
+		d.step = stepDetails
+		d.focusField()
+		return
+	case "j", "down":
+		d.cursor++
+	case "k", "up":
+		d.cursor--
+	case "g":
+		d.cursor = 0
+	case "G":
+		d.cursor = last
+	case "ctrl+d":
+		d.cursor += max(rows/2, 1)
+	case "ctrl+u":
+		d.cursor -= max(rows/2, 1)
+	case "space":
+		d.checked[d.cursor] = !d.checked[d.cursor]
+		d.cursor++
+	case "a":
+		all := !slices.Contains(d.checked, false)
+		for i := range d.checked {
+			d.checked[i] = !all
+		}
+	}
+	d.cursor = min(max(d.cursor, 0), last)
+	d.top = windowTop(d.top, d.cursor, rows, len(d.checked))
+}
+
+// windowTop is the first visible row of a window of rows rows over n that
+// keeps cursor visible, moving from top as little as possible.
+func windowTop(top, cursor, rows, n int) int {
+	top = min(top, cursor)
+	top = max(top, cursor-rows+1)
+	return min(max(top, 0), max(n-rows, 0))
+}
+
+func checkedCount(checked []bool) int {
+	n := 0
+	for _, c := range checked {
+		if c {
+			n++
+		}
+	}
+	return n
+}
+
+// showEntries starts the playlist checklist with every entry checked.
+func (d *newDialog) showEntries(n int) {
+	d.step, d.cursor, d.top = stepEntries, 0, 0
+	d.checked = slices.Repeat([]bool{true}, n)
 }
 
 // submitURL probes the entered URL, or asks to queue several at once.
@@ -418,7 +509,7 @@ func (d *newDialog) change(delta int) {
 	}
 }
 
-// queueDetails queues the probed video, or every playlist entry, with the
+// queueDetails queues the probed video, or the checked playlist entries, with the
 // chosen format, resolution and overrides. An invalid clip is shown as the
 // dialog's error instead.
 func (m *Model) queueDetails() {
@@ -458,12 +549,15 @@ func (m *Model) queueDetails() {
 		}})
 		return
 	}
-	reqs := make([]queue.NewItem, len(info.Entries))
+	var reqs []queue.NewItem
 	for i, e := range info.Entries {
-		reqs[i] = queue.NewItem{
+		if !d.checked[i] {
+			continue
+		}
+		reqs = append(reqs, queue.NewItem{
 			URL: e.URL, Title: e.Title, Duration: e.Duration, Format: format, Resolution: res,
 			Template: template, Subtitles: subtitles, SponsorBlock: sponsorBlock,
-		}
+		})
 	}
 	m.queueAndClose(reqs)
 }
@@ -491,6 +585,12 @@ func (m Model) dialogWidth() int {
 	return min(72, max(m.width-4, 24))
 }
 
+// entriesRows is the number of entry rows the checklist shows: up to
+// maxEntryRows, fewer when the terminal is short.
+func (m Model) entriesRows() int {
+	return min(max(m.bodyHeight()-entriesChrome, 1), maxEntryRows)
+}
+
 func (m Model) dialogView() string {
 	d := m.dialog
 	w := m.dialogWidth()
@@ -509,6 +609,8 @@ func (m Model) dialogView() string {
 			d.spinner.View()+" Fetching info…",
 			dimStyle.Render(ansi.Truncate(strings.TrimSpace(d.input.Value()), inner, "…")),
 			"", dimStyle.Render("esc cancel"))
+	case stepEntries:
+		lines = append(lines, m.entriesLines(inner)...)
 	case stepDetails:
 		lines = append(lines, d.detailsLines(inner)...)
 	case stepBatch:
@@ -525,6 +627,47 @@ func (m Model) dialogView() string {
 	return newDialogStyle.Width(w).Render(strings.Join(lines, "\n"))
 }
 
+// entriesLines renders the playlist checklist: header, the visible window of
+// entries with scroll markers, and the hint.
+func (m Model) entriesLines(w int) []string {
+	d, info := m.dialog, m.dialog.info
+	bold := lipgloss.NewStyle().Bold(true)
+	n, rows := len(info.Entries), m.entriesRows()
+	top := windowTop(d.top, d.cursor, rows, n)
+	end := min(top+rows, n)
+	lines := []string{
+		ansi.Truncate(bold.Render("Playlist: ")+cmpStr(info.Title, info.URL), w, "…"),
+		dimStyle.Render(fmt.Sprintf("%d/%d selected", checkedCount(d.checked), n)),
+		"",
+	}
+	if top > 0 {
+		lines = append(lines, dimStyle.Render(fmt.Sprintf("  ↑ %d more", top)))
+	}
+	for i := top; i < end; i++ {
+		e := info.Entries[i]
+		marker, box := "  ", "[ ]"
+		if i == d.cursor {
+			marker = "› "
+		}
+		if d.checked[i] {
+			box = "[x]"
+		}
+		line := fmt.Sprintf("%s%s %2d. %s", marker, box, i+1, cmpStr(e.Title, e.URL))
+		if dur := durationLabel(e.Duration); dur != "" {
+			line += dimStyle.Render(" · " + dur)
+		}
+		lines = append(lines, ansi.Truncate(line, w, "…"))
+	}
+	if end < n {
+		lines = append(lines, dimStyle.Render(fmt.Sprintf("  ↓ %d more", n-end)))
+	}
+	lines = append(lines, "")
+	if d.err != nil {
+		lines = append(lines, errorStyle.Width(w).MaxHeight(1).Render(d.err.Error()), "")
+	}
+	return append(lines, dimStyle.Render(ansi.Truncate("j/k move · space toggle · a all/none · enter next · esc back", w, "…")))
+}
+
 func (d *newDialog) detailsLines(w int) []string {
 	info := d.info
 	bold := lipgloss.NewStyle().Bold(true)
@@ -532,19 +675,7 @@ func (d *newDialog) detailsLines(w int) []string {
 	if info.IsPlaylist {
 		lines = append(lines,
 			ansi.Truncate(bold.Render("Playlist: ")+cmpStr(info.Title, info.URL), w, "…"),
-			dimStyle.Render(joinNonEmpty(fmt.Sprintf("%d entries", len(info.Entries)), info.Uploader, info.Extractor)),
-			"")
-		for i, e := range info.Entries {
-			if i == playlistPreview {
-				lines = append(lines, dimStyle.Render(fmt.Sprintf("   … and %d more", len(info.Entries)-i)))
-				break
-			}
-			line := fmt.Sprintf("%2d. %s", i+1, cmpStr(e.Title, e.URL))
-			if dur := durationLabel(e.Duration); dur != "" {
-				line += dimStyle.Render(" · " + dur)
-			}
-			lines = append(lines, ansi.Truncate(line, w, "…"))
-		}
+			dimStyle.Render(joinNonEmpty(fmt.Sprintf("%d of %d entries", checkedCount(d.checked), len(info.Entries)), info.Uploader, info.Extractor)))
 	} else {
 		title := bold.Width(w).MaxHeight(2).Render(cmpStr(info.Title, info.URL))
 		size := ""
@@ -592,7 +723,7 @@ func (d *newDialog) detailsLines(w int) []string {
 	}
 	action := "enter queue"
 	if info.IsPlaylist {
-		action = fmt.Sprintf("enter queue %d downloads", len(info.Entries))
+		action = fmt.Sprintf("enter queue %d downloads", checkedCount(d.checked))
 	}
 	lines = append(lines, dimStyle.Render(ansi.Truncate(action+" · tab/↑/↓ field · h/l/space change · esc back", w, "…")))
 	return lines
