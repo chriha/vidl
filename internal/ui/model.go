@@ -262,7 +262,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, k.Start):
 		m.act(m.mgr.Start)
 	case key.Matches(msg, k.Pause):
-		m.act(m.mgr.Pause)
+		m.act(m.pauseOrRequeue)
 	case key.Matches(msg, k.Cancel):
 		m.act(m.mgr.Cancel)
 	case key.Matches(msg, k.Retry):
@@ -410,6 +410,14 @@ func (m Model) retry(id string) error {
 		return errNotRetryable
 	}
 	return m.mgr.Start(id)
+}
+
+// pauseOrRequeue puts a paused download back in the queue and pauses any other.
+func (m Model) pauseOrRequeue(id string) error {
+	if it, ok := m.mgr.Get(id); ok && it.Status == queue.Paused {
+		return m.mgr.Requeue(id)
+	}
+	return m.mgr.Pause(id)
 }
 
 func (m Model) tabItems(t tab) []queue.Item {

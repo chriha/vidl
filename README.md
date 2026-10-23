@@ -23,8 +23,10 @@ downloads resume where they stopped.
 - **Per-download progress**: percentage, speed and ETA, combined across the
   separate video and audio streams yt-dlp fetches before merging.
 - **Pause, resume, cancel and retry.** Pausing keeps partial files so the
-  download resumes; cancelling deletes them. `R` on a finished download
-  downloads it again and replaces the file.
+  download resumes; `p` on a paused download puts it back in the queue to
+  wait for a free slot, while `s` resumes it at once. Cancelling deletes
+  partial files. `R` on a finished download downloads it again and
+  replaces the file.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads: open a file or show it in
   its folder, and clear the history.
@@ -208,7 +210,7 @@ automatically the next time you start vidl.
 | `shift+tab` / `h`     | Previous tab                                        |
 | `1` `2` `3`           | Go to Downloads / Finished / Settings               |
 | `s`                   | Start or resume; retries failed or cancelled        |
-| `p`                   | Pause                                               |
+| `p`                   | Pause, or put a paused download back in the queue   |
 | `c`                   | Cancel (deletes partial files)                      |
 | `R`                   | Retry failed or cancelled, or re-download finished  |
 | `u` / `d`             | Move queued download up / down                      |
