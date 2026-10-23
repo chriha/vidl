@@ -1,9 +1,8 @@
 # vidl implementation plan
 
-Handoff document for continuing development. Milestones 1–7 are done;
-this file describes what was decided, what exists, what was learned the hard
-way, and what remains (milestone 8) in enough detail to proceed without
-the original conversation.
+Handoff document for continuing development. Milestones 1–8 are done;
+this file describes what was decided, what exists and what was learned the hard
+way, in enough detail to continue without the original conversation.
 
 Read `README.md` first for the user-facing picture, then this file.
 
@@ -103,6 +102,10 @@ internal/ui/           Bubble Tea root model
   detail.go            detail panel
   dialog.go            new-download dialog, Prober interface
   settings.go          Settings tab: field table, inline editing, validation
+  search.go            `/` filter per tab
+  status.go            status line, window title, terminal progress bar
+  toast.go             transient messages
+  open.go              `o`/`O`: open or reveal a finished file
 ```
 
 ### `ytdlp` package
@@ -193,6 +196,20 @@ calls `mgr.SetConfig` and then `config.Save(cfgPath)`; save errors go to
 `m.err`, validation errors stay inline under the form. `ui.New(mgr, prober,
 cfgPath)`.
 
+Milestone 8 additions: errors and notices are toasts (`m.toast`, set via
+`report(err)`/`notice(text)`); `Update` schedules a `toastExpiredMsg` tick
+whenever the toast's `seq` changes, and a stale tick (older `seq`) is
+ignored. `report(nil)` dismisses an error toast, so a successful action
+clears a previous error. The status line above the help shows counts and
+total speed; the queue save error stays as a sticky red line above it.
+Search keeps one query per tab in `m.filter`; `tabItems` applies it, so
+cursor, scrolling and every action work on the filtered list, while the `#`
+column keeps the real queue position. `confirmation` is a generic y/n dialog
+(remove, clear history). `o`/`O` go through the injected `Model.open`
+(`systemOpen` runs `open`/`xdg-open` without capturing output); tests
+replace it. Below `minWidth`×`minHeight` (40×8) `render` shows only a size
+message.
+
 ## Lessons learned (don't rediscover these)
 
 - **yt-dlp writes postprocess progress to stderr** and download progress to
@@ -222,7 +239,7 @@ cfgPath)`.
   `detailView()` rely on that, so check it rather than `m.detail`. The log
   viewport is synced in `Update` (`syncLog`), never in `View`, and always
   jumps to the bottom. Terminals narrower than the tab bar (~31 columns)
-  still overflow; that's milestone 8.
+  can't fit, so below 40×8 `render` shows a size message instead.
 - **New-download dialog**: probe results carry a request id (`probeSeq`) and
   are ignored unless they match the dialog's current probe, so a cancelled
   probe (`esc`) that returns late can't overwrite a newer one. Bubble Tea v2's
@@ -235,6 +252,9 @@ cfgPath)`.
 - In zsh, `T="tmux -L vidl-test"; $T ...` fails (no word splitting); use a
   function `T() { tmux -L vidl-test "$@"; }`. Multi-URL paste can be tested
   with `tmux load-buffer -` + `paste-buffer -p` (bracketed paste).
+- **Opening files**: don't capture `xdg-open`'s output; the launched app can
+  inherit the pipe and keep `Run` waiting until it exits. Don't press `o`/`O`
+  in manual tmux checks, they open real apps on the developer's desktop.
 - **Manual checks in tmux**: use a private server (`tmux -L vidl-test`) and
   never `kill-session` on the default one; the developer may be running the
   agent inside a tmux session with the same name.
@@ -255,7 +275,8 @@ cfgPath)`.
 
 ## Remaining milestones
 
-Suggested order: 4 → 5 → 6 → 7 → 8 (4–7 are done). Each should be usable on its own.
+All milestones (4–8) are done; the sections below are kept as the record of
+what each one specified.
 
 ### Milestone 4: Downloads and Finished tables
 

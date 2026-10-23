@@ -2,11 +2,13 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -36,15 +38,24 @@ var (
 	dialogStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("9")).Padding(0, 1)
 )
 
+// Below this size the UI shows a message instead of the tabs.
+const (
+	minWidth  = 40
+	minHeight = 8
+)
+
 var errNotRetryable = errors.New("only failed or cancelled downloads can be retried")
 
 type changedMsg struct{}
 
-// confirmRemove is the pending removal shown in the confirmation dialog.
-type confirmRemove struct {
-	id    string
-	title string
-	note  string
+// confirmation is a pending destructive action awaiting y/n.
+type confirmation struct {
+	question string // "Remove download?"
+	subject  string // what the action applies to
+	note     string // consequences, optional
+	verb     string // label of y
+	action   func() error
+	done     string // notice shown after the action succeeded, optional
 }
 
 // Model is the root Bubble Tea model.
@@ -61,11 +72,15 @@ type Model struct {
 	cursor  [tabCount]int
 	sel     [tabCount]string // id under the cursor, followed across refreshes
 	offset  [tabCount]int    // first visible row
-	confirm *confirmRemove
+	confirm *confirmation
 	detail  bool           // detail panel open
 	log     viewport.Model // yt-dlp output in the detail panel
 	dialog  *newDialog     // new-download dialog, nil when closed
-	err     error
+	toast   toast
+
+	filter [tabCount]string // search query per tab
+	search *textinput.Model // filter input, nil when closed
+	open   opener
 
 	settings settingsForm
 	cfgPath  string // where settings are saved
@@ -79,7 +94,7 @@ type Model struct {
 func New(mgr *queue.Manager, prober Prober, cfgPath string) Model {
 	m := Model{
 		mgr: mgr, prober: prober, keys: newKeyMap(), help: help.New(), log: viewport.New(),
-		clipboard: clipboard.ReadAll, cfgPath: cfgPath,
+		clipboard: clipboard.ReadAll, cfgPath: cfgPath, open: systemOpen,
 	}
 	m.log.SoftWrap = true
 	m.refresh()
@@ -98,10 +113,15 @@ func (m Model) waitForChange() tea.Cmd {
 	}
 }
 
-// refresh takes a new snapshot and keeps each cursor on the same item,
-// falling back to the same index when the item left the list.
+// refresh takes a new snapshot and keeps the cursors on their items.
 func (m *Model) refresh() {
 	m.queue, m.history = m.mgr.Snapshot()
+	m.follow()
+}
+
+// follow keeps each cursor on the same item, falling back to the same index
+// when the item left the (filtered) list.
+func (m *Model) follow() {
 	for _, t := range []tab{tabDownloads, tabFinished} {
 		items := m.tabItems(t)
 		if i := slices.IndexFunc(items, func(it queue.Item) bool { return it.ID == m.sel[t] }); i >= 0 {
@@ -120,6 +140,9 @@ func (m *Model) refresh() {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	next.syncLog()
+	if next.toast.seq != m.toast.seq && next.toast.text != "" {
+		cmd = tea.Batch(cmd, expireToast(next.toast.seq))
+	}
 	return next, cmd
 }
 
@@ -134,11 +157,22 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.settings.edit != nil {
 			m.settings.edit.SetWidth(m.settingValueWidth() - 1)
 		}
+		if m.search != nil {
+			m.search.SetWidth(max(m.width-4, 8))
+		}
 		m.scroll()
 		return m, nil
 	case changedMsg:
 		m.refresh()
 		return m, m.waitForChange()
+	case toastExpiredMsg:
+		if msg.seq == m.toast.seq {
+			m.toast = toast{seq: m.toast.seq}
+		}
+		return m, nil
+	case openedMsg:
+		m.report(msg.err)
+		return m, nil
 	}
 	if m.dialog != nil {
 		return m.handleDialogMsg(msg)
@@ -147,6 +181,9 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if m.confirm != nil {
 			return m.handleConfirmKey(msg)
+		}
+		if m.search != nil {
+			return m.handleSearchKey(msg)
 		}
 		if m.tab == tabSettings {
 			if next, cmd, ok := m.handleSettingsKey(msg); ok {
@@ -157,14 +194,17 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		m, cmd = m.handleKey(msg)
 		m.scroll()
 		return m, cmd
-	default:
-		if m.settings.edit != nil { // paste and cursor blink
-			var cmd tea.Cmd
+	default: // paste and cursor blink
+		var cmd tea.Cmd
+		switch {
+		case m.search != nil:
+			*m.search, cmd = m.search.Update(msg)
+			m.setFilter(m.search.Value())
+		case m.settings.edit != nil:
 			*m.settings.edit, cmd = m.settings.edit.Update(msg)
-			return m, cmd
 		}
+		return m, cmd
 	}
-	return m, nil
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -212,6 +252,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.refresh()
 	case key.Matches(msg, k.Remove):
 		m.askRemove()
+	case key.Matches(msg, k.ClearHistory):
+		m.askClearHistory()
+	case key.Matches(msg, k.Open):
+		return m, m.openSelected(false)
+	case key.Matches(msg, k.Reveal):
+		return m, m.openSelected(true)
+	case key.Matches(msg, k.Search):
+		return m, m.openSearch()
 	case key.Matches(msg, k.New):
 		return m, m.openDialog()
 	case key.Matches(msg, k.Detail):
@@ -219,7 +267,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.detail = !m.detail
 		}
 	case key.Matches(msg, k.Close):
-		m.detail = false
+		if m.detail {
+			m.detail = false
+		} else if m.filtering() {
+			m.setFilter("")
+		}
 	}
 	return m, nil
 }
@@ -229,8 +281,15 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "y", "Y":
-		m.err = m.mgr.Remove(m.confirm.id)
+		c := m.confirm
 		m.confirm = nil
+		if err := c.action(); err != nil {
+			m.report(err)
+		} else if c.done != "" {
+			m.notice(c.done)
+		} else {
+			m.report(nil)
+		}
 		m.refresh()
 	case "n", "N", "esc":
 		m.confirm = nil
@@ -239,14 +298,18 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 }
 
 func (m *Model) askRemove() {
-	if m.tab != tabDownloads && m.tab != tabFinished {
+	if !m.hasTable() {
 		return
 	}
 	it, ok := m.selected()
 	if !ok {
 		return
 	}
-	c := &confirmRemove{id: it.ID, title: it.DisplayTitle()}
+	mgr := m.mgr
+	c := &confirmation{
+		question: "Remove download?", subject: it.DisplayTitle(), verb: "remove",
+		action: func() error { return mgr.Remove(it.ID) },
+	}
 	switch {
 	case it.Status == queue.Finished:
 		c.note = "The downloaded file is kept."
@@ -254,6 +317,48 @@ func (m *Model) askRemove() {
 		c.note = "Partial files will be deleted."
 	}
 	m.confirm = c
+}
+
+// askClearHistory asks to clear the finished history, or only the items
+// matching the filter while one is active.
+func (m *Model) askClearHistory() {
+	if m.tab != tabFinished || len(m.history) == 0 {
+		return
+	}
+	items := m.items()
+	if len(items) == 0 {
+		return
+	}
+	mgr := m.mgr
+	c := &confirmation{
+		question: "Clear finished history?",
+		subject:  plural(len(items), "download"),
+		note:     "Downloaded files are kept.",
+		verb:     "clear",
+		done:     "Cleared " + plural(len(items), "download") + " from history",
+		action: func() error {
+			mgr.ClearHistory()
+			return nil
+		},
+	}
+	if len(items) < len(m.history) {
+		c.question = "Remove matching downloads from history?"
+		c.action = func() error {
+			var errs []error
+			for _, it := range items {
+				errs = append(errs, mgr.Remove(it.ID))
+			}
+			return errors.Join(errs...)
+		}
+	}
+	m.confirm = c
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func (m Model) retry(id string) error {
@@ -267,9 +372,9 @@ func (m Model) retry(id string) error {
 func (m Model) tabItems(t tab) []queue.Item {
 	switch t {
 	case tabDownloads:
-		return m.queue
+		return filterItems(m.queue, m.filter[t])
 	case tabFinished:
-		return m.history
+		return filterItems(m.history, m.filter[t])
 	}
 	return nil
 }
@@ -314,14 +419,15 @@ func (m *Model) act(fn func(id string) error) {
 		return
 	}
 	if it, ok := m.selected(); ok {
-		m.err = fn(it.ID)
+		m.report(fn(it.ID))
 	}
 }
 
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
-	v.WindowTitle = "vidl"
+	v.WindowTitle = m.windowTitle()
+	v.ProgressBar = m.progressBar()
 	return v
 }
 
@@ -339,11 +445,9 @@ func (m Model) tabBar() string {
 
 func (m Model) footer() string {
 	_, detail := m.detailItem()
-	footer := m.help.View(tabKeys{m.keys, m.tab, detail})
-	if m.err != nil {
-		footer = errorStyle.Render(m.err.Error()) + "\n" + footer
-	} else if err := m.mgr.SaveError(); err != nil {
-		footer = errorStyle.Render("saving queue: "+err.Error()) + "\n" + footer
+	footer := m.statusLine() + "\n" + m.help.View(tabKeys{m.keys, m.tab, detail, m.filtering()})
+	if err := m.mgr.SaveError(); err != nil {
+		footer = errorStyle.Render(" saving queue: "+err.Error()) + "\n" + footer
 	}
 	// help.Model can overshoot its width by one item, so never trust it to fit.
 	lines := strings.Split(footer, "\n")
@@ -359,12 +463,19 @@ func (m Model) bodyHeight() int {
 
 // tableRows is the number of item rows visible below the table header.
 func (m Model) tableRows() int {
-	return max(m.bodyHeight()-m.detailHeight()-1, 1)
+	rows := m.bodyHeight() - m.detailHeight() - 1
+	if m.filtering() {
+		rows--
+	}
+	return max(rows, 1)
 }
 
 func (m Model) render() string {
 	if m.width == 0 {
 		return ""
+	}
+	if m.width < minWidth || m.height < minHeight {
+		return m.tooSmallView()
 	}
 	header, footer := m.tabBar(), m.footer()
 	bodyHeight := m.bodyHeight()
@@ -381,7 +492,16 @@ func (m Model) render() string {
 		tableH := bodyHeight - m.detailHeight()
 		body = lipgloss.NewStyle().Height(tableH).MaxHeight(tableH).Render(body) + "\n" + panel
 	}
+	if m.filtering() {
+		body = m.filterLine() + "\n" + body
+	}
 	body = lipgloss.NewStyle().Height(bodyHeight).MaxHeight(bodyHeight).Render(body)
+	if t := m.toastView(); t != "" {
+		body = lipgloss.NewCompositor(
+			lipgloss.NewLayer(body),
+			lipgloss.NewLayer(t).X(max(m.width-lipgloss.Width(t)-1, 0)).Y(max(bodyHeight-lipgloss.Height(t), 0)).Z(2),
+		).Render()
+	}
 	if m.confirm != nil {
 		body = m.overlay(body, m.confirmView(), bodyHeight)
 	}
@@ -398,13 +518,19 @@ func (m Model) tableView(cols []column, cells func(int, queue.Item) []cell, empt
 	}
 	widths := layout(cols, m.width)
 	lines := []string{headerRow(cols, widths, m.width)}
+	all := m.queue
+	if m.tab == tabFinished {
+		all = m.history
+	}
 	off, cur := m.offset[m.tab], m.cursor[m.tab]
 	for i := off; i < min(off+m.tableRows(), len(items)); i++ {
 		base := lipgloss.NewStyle()
 		if i == cur {
 			base = cursorStyle
 		}
-		lines = append(lines, renderRow(cols, widths, cells(i, items[i]), base, m.width))
+		// Number rows by their position in the whole list, not the filtered one.
+		pos := slices.IndexFunc(all, func(it queue.Item) bool { return it.ID == items[i].ID })
+		lines = append(lines, renderRow(cols, widths, cells(pos, items[i]), base, m.width))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -413,13 +539,13 @@ func (m Model) confirmView() string {
 	c := m.confirm
 	w := min(60, max(m.width-4, 20))
 	lines := []string{
-		lipgloss.NewStyle().Bold(true).Render("Remove download?"),
-		lipgloss.NewStyle().Width(w - 4).MaxHeight(3).Render(c.title),
+		lipgloss.NewStyle().Bold(true).Render(c.question),
+		lipgloss.NewStyle().Width(w - 4).MaxHeight(3).Render(c.subject),
 	}
 	if c.note != "" {
 		lines = append(lines, dimStyle.Render(c.note))
 	}
-	lines = append(lines, "", "y remove · n/esc keep")
+	lines = append(lines, "", "y "+c.verb+" · n/esc keep")
 	return dialogStyle.Width(w).Render(strings.Join(lines, "\n"))
 }
 
@@ -427,8 +553,18 @@ func (m Model) confirmView() string {
 func (m Model) overlay(body, box string, height int) string {
 	x := max((m.width-lipgloss.Width(box))/2, 0)
 	y := max((height-lipgloss.Height(box))/2, 0)
-	return lipgloss.NewCompositor(
+	out := lipgloss.NewCompositor(
 		lipgloss.NewLayer(body),
 		lipgloss.NewLayer(box).X(x).Y(y).Z(1),
 	).Render()
+	return lipgloss.NewStyle().MaxHeight(height).Render(out)
+}
+
+func (m Model) tooSmallView() string {
+	msg := fmt.Sprintf("Terminal too small\nneed %d×%d, have %d×%d", minWidth, minHeight, m.width, m.height)
+	lines := strings.Split(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dimStyle.Render(msg)), "\n")
+	for i, l := range lines {
+		lines[i] = ansi.Truncate(l, m.width, "")
+	}
+	return strings.Join(lines, "\n")
 }

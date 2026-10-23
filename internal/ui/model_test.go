@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +21,7 @@ import (
 )
 
 // fakeRunner fails URLs starting with "fail", and blocks the rest until
-// cancelled or released with finish. Every run first logs fakeLogLines lines.
+// cancelled or released with finish, which writes <url>.mp4. Every run first logs fakeLogLines lines.
 type fakeRunner struct {
 	mu   sync.Mutex
 	done map[string]chan struct{}
@@ -51,6 +53,11 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	onEvent(ytdlp.Event{Kind: ytdlp.EventProgress, Progress: ytdlp.Progress{Percent: 42, Speed: 2048, ETA: time.Minute}})
 	select {
 	case <-f.ch(job.URL):
+		path := filepath.Join(job.Dir, job.URL+".mp4")
+		if err := os.WriteFile(path, []byte("video"), 0o644); err != nil {
+			return err
+		}
+		onEvent(ytdlp.Event{Kind: ytdlp.EventFile, Path: path})
 		return nil
 	case <-ctx.Done():
 		return context.Cause(ctx)
@@ -142,8 +149,8 @@ func TestCursorFollowsItemAcrossRefresh(t *testing.T) {
 func TestMoveKeepsCursorOnItem(t *testing.T) {
 	m, _, _ := newTestModel(t, 1, "a", "b", "c")
 	m = press(t, m, "G", "u")
-	if m.err != nil {
-		t.Fatal(m.err)
+	if m.toast.err != nil {
+		t.Fatal(m.toast.err)
 	}
 	if got := selectedURL(m); got != "c" || m.cursor[tabDownloads] != 1 {
 		t.Errorf("selected %q at %d, want c at 1", got, m.cursor[tabDownloads])
@@ -165,8 +172,8 @@ func TestRemoveNeedsConfirmation(t *testing.T) {
 		t.Fatalf("esc: confirm = %v, %d items", m.confirm, len(m.queue))
 	}
 	m = press(t, m, "r", "j", "y")
-	if m.confirm != nil || m.err != nil {
-		t.Fatalf("confirm = %v, err = %v", m.confirm, m.err)
+	if m.confirm != nil || m.toast.err != nil {
+		t.Fatalf("confirm = %v, err = %v", m.confirm, m.toast.err)
 	}
 	q, _ := mgr.Snapshot()
 	if len(q) != 1 || q[0].URL != "a" {
@@ -186,13 +193,13 @@ func TestRetryOnlyFailed(t *testing.T) {
 	m = update(t, m, changedMsg{})
 	m = selectURL(t, m, "b")
 	m = press(t, m, "R")
-	if !errors.Is(m.err, errNotRetryable) {
-		t.Errorf("retry running: err = %v", m.err)
+	if !errors.Is(m.toast.err, errNotRetryable) {
+		t.Errorf("retry running: err = %v", m.toast.err)
 	}
 	m = selectURL(t, m, "fail-a")
 	m = press(t, m, "R")
-	if m.err != nil {
-		t.Errorf("retry failed: err = %v", m.err)
+	if m.toast.err != nil {
+		t.Errorf("retry failed: err = %v", m.toast.err)
 	}
 }
 
@@ -235,5 +242,87 @@ func TestHalfPageAndScrolling(t *testing.T) {
 	}
 	if h := strings.Count(m.render(), "\n") + 1; h > m.height {
 		t.Errorf("render height %d > %d", h, m.height)
+	}
+}
+
+// finishAll completes the downloads of urls, which must all be running, and
+// refreshes m.
+func finishAll(t *testing.T, m Model, mgr *queue.Manager, r *fakeRunner, urls ...string) Model {
+	t.Helper()
+	_, before := mgr.Snapshot()
+	for _, u := range urls {
+		r.finish(u)
+	}
+	waitFor(t, "downloads finished", func() bool { _, h := mgr.Snapshot(); return len(h) == len(before)+len(urls) })
+	return update(t, m, changedMsg{})
+}
+
+func TestClearHistory(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter string
+		want   []string // URLs left in history
+	}{
+		{name: "all", want: nil},
+		{name: "filtered", filter: "b", want: []string{"a"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, mgr, r := newTestModel(t, 2, "a", "b")
+			m = finishAll(t, m, mgr, r, "a", "b")
+			m = press(t, m, "2")
+			m.setFilter(tt.filter)
+			m = press(t, m, "X")
+			if m.confirm == nil {
+				t.Fatal("no confirmation dialog")
+			}
+			m = press(t, m, "n")
+			if _, h := mgr.Snapshot(); len(h) != 2 {
+				t.Fatalf("n cleared history: %d items left", len(h))
+			}
+			m = press(t, m, "X", "y")
+			if m.toast.err != nil {
+				t.Fatal(m.toast.err)
+			}
+			_, h := mgr.Snapshot()
+			var got []string
+			for _, it := range h {
+				got = append(got, it.URL)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("history = %v, want %v", got, tt.want)
+			}
+			for _, u := range []string{"a", "b"} {
+				if _, err := os.Stat(filepath.Join(mgr.Config().DownloadDir, u+".mp4")); err != nil {
+					t.Errorf("file of %s deleted: %v", u, err)
+				}
+			}
+		})
+	}
+}
+
+func TestClearHistoryOnlyOnFinishedTab(t *testing.T) {
+	m, mgr, r := newTestModel(t, 2, "a", "b")
+	m = finishAll(t, m, mgr, r, "a")
+	if m = press(t, m, "X"); m.confirm != nil {
+		t.Error("X on the Downloads tab asks to clear history")
+	}
+}
+
+func TestTooSmallTerminal(t *testing.T) {
+	m, _, _ := newTestModel(t, 1, "a")
+	m = update(t, m, tea.WindowSizeMsg{Width: 20, Height: 5})
+	out := m.render()
+	if !strings.Contains(out, "too small") {
+		t.Errorf("no size message in %q", out)
+	}
+	lines := strings.Split(out, "\n")
+	if len(lines) > 5 {
+		t.Errorf("%d lines, want at most 5", len(lines))
+	}
+	for _, l := range lines {
+		if w := ansi.StringWidth(l); w > 20 {
+			t.Errorf("line wider than terminal (%d): %q", w, l)
+		}
 	}
 }

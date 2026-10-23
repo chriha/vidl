@@ -33,7 +33,9 @@ func TestLayoutDropsColumnsWhenNarrow(t *testing.T) {
 		{75, all[:5]},
 		{68, all[:5]},
 		{67, all[:4]},
-		{20, all[:4]},
+		{57, all[:4]},
+		{56, []string{"#", "Title", "Progress"}},
+		{20, []string{"#", "Title", "Progress"}},
 	}
 	for _, c := range cases {
 		if got := visible(c.width); !slices.Equal(got, c.want) {
