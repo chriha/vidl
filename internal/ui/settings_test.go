@@ -159,6 +159,50 @@ func TestSettingsRateLimit(t *testing.T) {
 	}
 }
 
+func TestSettingsSponsorBlockRemove(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		invalid bool
+	}{
+		{input: "sponsor", want: "sponsor"},
+		{input: " sponsor , selfpromo,interaction ", want: "sponsor,selfpromo,interaction"},
+		{input: "all", want: "all"},
+		{input: "intro,outro,preview,filler,music_offtopic", want: "intro,outro,preview,filler,music_offtopic"},
+		{input: "  ", want: ""},
+		{input: "ads", invalid: true},
+		{input: "sponsor,,intro", invalid: true},
+		{input: "sponsor;intro", invalid: true},
+		{input: "poi_highlight", invalid: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			m := settingsModel(t, "Remove sponsor segments")
+			m = press(t, m, "enter")
+			if m.settings.edit == nil {
+				t.Fatal("enter didn't open the editor")
+			}
+			m.settings.edit.SetValue(tt.input)
+			m = press(t, m, "enter")
+			if tt.invalid {
+				if m.settings.err == nil || m.settings.edit == nil {
+					t.Errorf("err = %v, editor open = %v; want error and open editor", m.settings.err, m.settings.edit != nil)
+				}
+				if got := m.mgr.Config().SponsorBlockRemove; got != "" {
+					t.Errorf("applied %q", got)
+				}
+				return
+			}
+			if m.settings.edit != nil {
+				t.Fatalf("editor still open: %v", m.settings.err)
+			}
+			if got := saved(t, m).SponsorBlockRemove; got != tt.want {
+				t.Errorf("saved %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSettingsEditKeysGoToInput(t *testing.T) {
 	m := settingsModel(t, "Subtitle languages")
 	m = press(t, m, "enter")

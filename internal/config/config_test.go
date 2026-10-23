@@ -25,6 +25,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	want.DefaultFormat = ytdlp.MKV
 	want.CookiesFromBrowser = "firefox"
 	want.Notify = false
+	want.SponsorBlockRemove = "sponsor,selfpromo"
 	if err := Save(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +75,32 @@ func TestNotifyDefaultsToOn(t *testing.T) {
 			}
 			if cfg.Notify != tt.want {
 				t.Errorf("notify = %v, want %v", cfg.Notify, tt.want)
+			}
+		})
+	}
+}
+
+func TestSponsorBlockRemoveKey(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want string
+	}{
+		{name: "key missing", data: "concurrency = 2\n", want: ""},
+		{name: "set", data: "sponsorblock_remove = \"sponsor,intro\"\n", want: "sponsor,intro"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tt.data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.SponsorBlockRemove != tt.want {
+				t.Errorf("sponsorblock_remove = %q, want %q", cfg.SponsorBlockRemove, tt.want)
 			}
 		})
 	}

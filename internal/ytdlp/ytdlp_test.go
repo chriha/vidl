@@ -247,6 +247,29 @@ func TestJobArgsPerJobOptions(t *testing.T) {
 	}
 }
 
+func TestJobArgsSponsorBlock(t *testing.T) {
+	tests := []struct {
+		name       string
+		categories string
+		want       string // "" = no --sponsorblock-remove
+	}{
+		{name: "off", categories: ""},
+		{name: "one category", categories: "sponsor", want: "sponsor"},
+		{name: "several categories", categories: "sponsor,selfpromo,interaction", want: "sponsor,selfpromo,interaction"},
+		{name: "all", categories: "all", want: "all"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := Job{URL: "https://example.com/v", Dir: "/dl", Format: MP4, SponsorBlockRemove: tt.categories}.Args()
+			opts := args[:len(args)-2]
+			got, ok := argValue(opts, "--sponsorblock-remove")
+			if ok != (tt.want != "") || got != tt.want {
+				t.Errorf("--sponsorblock-remove = %q (present %v), want %q", got, ok, tt.want)
+			}
+		})
+	}
+}
+
 // fakeYtdlp writes a shell script standing in for yt-dlp.
 func fakeYtdlp(t *testing.T, body string) Runner {
 	t.Helper()

@@ -47,8 +47,10 @@ downloads resume where they stopped.
 - **Output formats**: mp4, mkv, webm (video) and mp3, m4a, opus (audio only),
   with a maximum resolution from 360p up to 2160p or best available.
 - **yt-dlp options** exposed as settings: filename template, embedded
-  subtitles, thumbnails and metadata, rate limit, and cookies from your
-  browser for private or age-restricted videos.
+  subtitles, thumbnails and metadata, rate limit, cookies from your
+  browser for private or age-restricted videos, and
+  [SponsorBlock](https://sponsor.ajay.app/) to cut sponsor segments and
+  other categories out of videos.
 - **Vim-style navigation.**
 
 ## Requirements
@@ -277,7 +279,8 @@ when you change a setting). Invalid values fall back to their defaults.
 The Settings tab checks values as you enter them: the download folder must be
 an absolute path or start with `~`, and vidl offers to create it if it doesn't
 exist; the rate limit must be a number with an optional `K`, `M` or `G`
-suffix.
+suffix; SponsorBlock categories must be a comma-separated list of known
+categories, or `all`.
 
 ```toml
 download_dir = "~/Downloads"
@@ -292,6 +295,7 @@ embed_metadata = true
 rate_limit = ""
 cookies_from_browser = ""
 notify = true
+sponsorblock_remove = ""
 ```
 
 | Key                    | Default                       | Description |
@@ -308,6 +312,7 @@ notify = true
 | `rate_limit`           | empty (unlimited)             | Maximum download rate per download, e.g. `500K` or `5M`. |
 | `cookies_from_browser` | empty (disabled)              | Use cookies from `brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari` or `vivaldi`, for private, members-only or age-restricted videos. |
 | `notify`               | `true`                        | Desktop notification when a download finishes or fails. |
+| `sponsorblock_remove`  | empty (disabled)              | [SponsorBlock](https://sponsor.ajay.app/) categories to cut out of videos, comma-separated: `sponsor`, `intro`, `outro`, `selfpromo`, `preview`, `filler`, `interaction`, `music_offtopic`, or `all`. Cutting re-encodes around the cuts, so post-processing takes longer. |
 
 Changing settings affects downloads that start afterwards; running downloads
 keep the settings they started with. `notify` applies at once.
