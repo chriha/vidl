@@ -189,6 +189,10 @@ shows it in Finder (macOS), selects it in Explorer (Windows) or opens its
 folder (Linux). Removing downloads
 from the history never deletes their files.
 
+`b` opens the selected download's source URL in the default browser, on the
+Downloads and Finished tabs and for downloads in any state. Only `http` and
+`https` URLs are opened, and marks are ignored.
+
 The line above the help shows the total download speed and how many downloads
 are running, queued, paused, failed or cancelled. Short messages and errors
 appear in the bottom right corner for a few seconds. While downloading, the
@@ -225,6 +229,7 @@ automatically the next time you start vidl.
 | `f`                   | Cycle the status filter (Downloads tab)             |
 | `o`                   | Open the file (Finished tab)                        |
 | `O`                   | Show the file in its folder (Finished tab)          |
+| `b`                   | Open the source URL in the browser                  |
 | `X`                   | Clear finished history (asks for confirmation)      |
 | `n`                   | New download                                        |
 | `?`                   | Toggle full help                                    |

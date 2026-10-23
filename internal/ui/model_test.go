@@ -48,7 +48,7 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 	for i := range fakeLogLines {
 		onEvent(ytdlp.Event{Kind: ytdlp.EventLog, Line: fmt.Sprintf("%s line %d", job.URL, i+1)})
 	}
-	if strings.HasPrefix(job.URL, "fail") {
+	if strings.Contains(job.URL, "fail") {
 		return errors.New("boom")
 	}
 	onEvent(ytdlp.Event{Kind: ytdlp.EventProgress, Progress: ytdlp.Progress{Percent: 42, Speed: 2048, ETA: time.Minute}})
@@ -58,6 +58,9 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 			return errors.New("boom")
 		}
 		path := filepath.Join(job.Dir, job.URL+".mp4")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
 		if err := os.WriteFile(path, []byte("video"), 0o644); err != nil {
 			return err
 		}

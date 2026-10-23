@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,7 +71,11 @@ func systemOpen(path string, reveal bool) error {
 	if !filepath.IsAbs(path) {
 		return fmt.Errorf("not an absolute path: %s", path)
 	}
-	spec := openCommand(runtime.GOOS, path, reveal)
+	return run(openCommand(runtime.GOOS, path, reveal))
+}
+
+// run executes spec and waits for it to finish.
+func run(spec openSpec) error {
 	cmd := exec.Command(spec.name, spec.args...)
 	if spec.cmdLine != "" {
 		setCmdLine(cmd, spec.cmdLine)
@@ -110,4 +115,46 @@ func (m *Model) openSelected(reveal bool) tea.Cmd {
 	}
 	open, path := m.open, it.FilePath
 	return func() tea.Msg { return openedMsg{open(path, reveal)} }
+}
+
+// browser opens url in the default web browser.
+type browser func(url string) error
+
+// errNotWebURL reports a URL that isn't an absolute http(s) URL.
+func errNotWebURL(raw string) error { return fmt.Errorf("not a web URL: %s", raw) }
+
+// webURL validates that raw is an absolute http or https URL with a host.
+func webURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return errNotWebURL(raw)
+	}
+	return nil
+}
+
+// systemBrowse opens an http(s) URL in the default web browser, passing it
+// as a single argument and never through a shell.
+func systemBrowse(raw string) error {
+	if err := webURL(raw); err != nil {
+		return err
+	}
+	return run(openCommand(runtime.GOOS, raw, false))
+}
+
+// browseSelected opens the source URL of the selected download, whatever its
+// status. Marks are ignored.
+func (m *Model) browseSelected() tea.Cmd {
+	if m.tab != tabDownloads && m.tab != tabFinished {
+		return nil
+	}
+	it, ok := m.selected()
+	if !ok {
+		return nil
+	}
+	if err := webURL(it.URL); err != nil {
+		m.report(err)
+		return nil
+	}
+	browse, raw := m.browse, it.URL
+	return func() tea.Msg { return openedMsg{browse(raw)} }
 }

@@ -85,6 +85,7 @@ type Model struct {
 	status [tabCount]int    // status filter per tab: 0 all, else statusCycle[i-1]
 	search *textinput.Model // filter input, nil when closed
 	open   opener
+	browse browser
 
 	marks [tabCount]map[string]bool // marked item ids per tab
 
@@ -107,7 +108,7 @@ type Model struct {
 func New(mgr *queue.Manager, prober Prober, cfgPath string) Model {
 	m := Model{
 		mgr: mgr, prober: prober, keys: newKeyMap(), help: help.New(), log: viewport.New(),
-		clipboard: clipboard.ReadAll, cfgPath: cfgPath, open: systemOpen, now: time.Now,
+		clipboard: clipboard.ReadAll, cfgPath: cfgPath, open: systemOpen, browse: systemBrowse, now: time.Now,
 	}
 	m.log.SoftWrap = true
 	m.refresh()
@@ -303,6 +304,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, m.openSelected(false)
 	case key.Matches(msg, k.Reveal):
 		return m, m.openSelected(true)
+	case key.Matches(msg, k.Browse):
+		cmd := m.browseSelected() // after, so m carries any reported error
+		return m, cmd
 	case key.Matches(msg, k.Mark):
 		m.toggleMark()
 	case key.Matches(msg, k.MarkAll):
