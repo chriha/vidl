@@ -152,12 +152,18 @@ func (m *Manager) SetConfig(cfg config.Config) {
 // (running downloads finish; Start still starts an item); releasing it fills
 // the free slots. The hold is not persisted.
 func (m *Manager) SetHeld(held bool) {
-	// stub
+	m.mu.Lock()
+	m.held = held
+	m.scheduleLocked()
+	m.mu.Unlock()
+	m.notify()
 }
 
 // Held reports whether the queue is held.
 func (m *Manager) Held() bool {
-	return false // stub
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.held
 }
 
 // SaveError returns the error of the most recent failed save, if any.
@@ -414,7 +420,7 @@ func (m *Manager) findQueuedLocked(id string) *Item {
 }
 
 func (m *Manager) scheduleLocked() {
-	if m.closed {
+	if m.closed || m.held {
 		return
 	}
 	for _, it := range m.queue {
