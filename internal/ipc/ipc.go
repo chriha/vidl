@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -27,6 +28,13 @@ const maxSocketPath = 103
 
 // maxRequest caps the size of one request.
 const maxRequest = 1 << 20
+
+// maxAcceptBackoff caps the pause between retries after a failed Accept.
+const maxAcceptBackoff = time.Second
+
+// wsaeConnRefused is Windows' raw WSAECONNREFUSED, which net does not map to
+// syscall.ECONNREFUSED.
+const wsaeConnRefused = syscall.Errno(10061)
 
 var (
 	// ErrNoServer means nothing listens on the socket: it is missing or stale.
@@ -74,7 +82,9 @@ type Server struct {
 }
 
 // Listen creates the socket at path. A stale socket file left by a crashed
-// instance is replaced; a socket that still answers yields ErrRunning.
+// instance (connection refused) is replaced; a socket that still answers
+// yields ErrRunning; any other dial error is returned, so the socket of a
+// live but busy instance is never removed.
 func Listen(path string, handle Handler) (*Server, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create socket dir: %w", err)
@@ -84,6 +94,9 @@ func Listen(path string, handle Handler) (*Server, error) {
 		if err == nil {
 			conn.Close()
 			return nil, ErrRunning
+		}
+		if !noListener(err) {
+			return nil, fmt.Errorf("check socket: %w", err)
 		}
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("remove stale socket: %w", err)
@@ -103,17 +116,25 @@ func Listen(path string, handle Handler) (*Server, error) {
 	return &Server{ln: ln, handle: handle, timeout: DefaultTimeout}, nil
 }
 
-// Serve handles connections one at a time until Close. It returns nil after
-// Close, once the connection in progress is done.
-func (s *Server) Serve() error {
+// Serve handles connections one at a time until Close and returns once the
+// connection in progress is done. Accept errors (such as running out of file
+// descriptors) go to OnError and are retried after a growing pause.
+func (s *Server) Serve() {
+	var backoff time.Duration
 	for {
 		conn, err := s.ln.Accept()
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
-				return nil
+				return
 			}
-			return fmt.Errorf("accept: %w", err)
+			if s.OnError != nil {
+				s.OnError(fmt.Errorf("accept: %w", err))
+			}
+			backoff = min(max(2*backoff, 5*time.Millisecond), maxAcceptBackoff)
+			time.Sleep(backoff)
+			continue
 		}
+		backoff = 0
 		if err := s.serveConn(conn); err != nil && s.OnError != nil {
 			s.OnError(err)
 		}
@@ -152,11 +173,15 @@ func (s *Server) serveConn(conn net.Conn) error {
 }
 
 // Send hands urls to the vidl listening at path and returns how many it
-// added. It fails with ErrNoServer when nothing listens there.
+// added. It fails with ErrNoServer when the socket is missing or stale;
+// other dial errors (a timeout, no permission) are returned as they are.
 func Send(path string, urls []string, timeout time.Duration) (int, error) {
 	conn, err := net.DialTimeout("unix", path, timeout)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %v", ErrNoServer, err)
+		if noListener(err) {
+			return 0, fmt.Errorf("%w: %v", ErrNoServer, err)
+		}
+		return 0, fmt.Errorf("connect to running vidl: %w", err)
 	}
 	defer conn.Close()
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
@@ -173,4 +198,12 @@ func Send(path string, urls []string, timeout time.Duration) (int, error) {
 		return 0, fmt.Errorf("running vidl: %s", reply.Error)
 	}
 	return reply.Added, nil
+}
+
+// noListener reports whether a dial error means nobody listens on the socket:
+// the file is missing or its owner is gone.
+func noListener(err error) bool {
+	return errors.Is(err, os.ErrNotExist) ||
+		errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, wsaeConnRefused)
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -38,15 +39,13 @@ func startServer(t *testing.T, handle Handler, configure ...func(*Server)) (*Ser
 	for _, c := range configure {
 		c(s)
 	}
-	done := make(chan error, 1)
-	go func() { done <- s.Serve() }()
+	done := make(chan struct{})
+	go func() { s.Serve(); close(done) }()
 	t.Cleanup(func() {
 		if err := s.Close(); err != nil {
 			t.Errorf("Close: %v", err)
 		}
-		if err := <-done; err != nil {
-			t.Errorf("Serve: %v", err)
-		}
+		<-done
 	})
 	return s, path
 }
@@ -221,8 +220,8 @@ func TestListenRecoversStaleSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Listen over a stale socket: %v", err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- s.Serve() }()
+	done := make(chan struct{})
+	go func() { s.Serve(); close(done) }()
 
 	if n, err := Send(path, []string{"https://example.com/a"}, time.Second); err != nil || n != 1 {
 		t.Errorf("Send = %d, %v; want 1, nil", n, err)
@@ -230,9 +229,7 @@ func TestListenRecoversStaleSocket(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Errorf("Close: %v", err)
 	}
-	if err := <-done; err != nil {
-		t.Errorf("Serve: %v", err)
-	}
+	<-done
 	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("socket file still exists after Close (err = %v)", err)
 	}
@@ -288,5 +285,85 @@ func makeStaleSocket(t *testing.T, path string) {
 	}
 	if _, err := os.Lstat(path); err != nil {
 		t.Fatalf("stale socket file missing: %v", err)
+	}
+}
+
+func TestDialErrorOtherThanRefusedKeepsSocket(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs Unix socket permissions enforced for a non-root user")
+	}
+	_, path := startServer(t, func(urls []string) (int, error) { return len(urls), nil })
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(path, 0o600) })
+
+	_, err := Send(path, []string{"https://example.com/a"}, time.Second)
+	if err == nil || errors.Is(err, ErrNoServer) {
+		t.Errorf("Send err = %v, want a non-ErrNoServer error", err)
+	}
+	_, err = Listen(path, func(urls []string) (int, error) { return len(urls), nil })
+	if err == nil || errors.Is(err, ErrRunning) {
+		t.Errorf("Listen err = %v, want a dial error", err)
+	}
+
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Send(path, []string{"https://example.com/a"}, time.Second); err != nil {
+		t.Errorf("Send after restoring permissions: %v (socket was removed?)", err)
+	}
+}
+
+// flakyListener fails Accept with errs, then blocks until closed.
+type flakyListener struct {
+	net.Listener
+	errs   chan error
+	closed chan struct{}
+}
+
+func (l *flakyListener) Accept() (net.Conn, error) {
+	select {
+	case err := <-l.errs:
+		return nil, err
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *flakyListener) Close() error {
+	close(l.closed)
+	return nil
+}
+
+func TestServeRetriesAcceptErrors(t *testing.T) {
+	acceptErr := errors.New("too many open files")
+	ln := &flakyListener{errs: make(chan error, 2), closed: make(chan struct{})}
+	ln.errs <- acceptErr
+	ln.errs <- acceptErr
+	reported := make(chan error, 2)
+	s := &Server{ln: ln, timeout: time.Second, OnError: func(err error) { reported <- err }}
+
+	done := make(chan struct{})
+	go func() { s.Serve(); close(done) }()
+	for range 2 {
+		select {
+		case err := <-reported:
+			if !errors.Is(err, acceptErr) {
+				t.Errorf("OnError got %v, want the accept error", err)
+			}
+		case <-done:
+			t.Fatal("Serve returned after an accept error")
+		case <-time.After(2 * time.Second):
+			t.Fatal("accept error not reported")
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after Close")
 	}
 }
