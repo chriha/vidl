@@ -167,6 +167,9 @@ func (m Model) detailFields(it queue.Item, w int) []string {
 		}
 	} else {
 		add("Progress", progressLabel(it))
+		if it.Progress.Total == 0 && it.EstimatedSize > 0 {
+			add("Size", "~"+humanBytes(it.EstimatedSize)+" (estimate)")
+		}
 	}
 	add("Times", joinNonEmpty(timeLabel("added", it.AddedAt), timeLabel("started", it.StartedAt), timeLabel("finished", it.FinishedAt)))
 	add("Output", it.FilePath)
