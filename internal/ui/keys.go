@@ -10,6 +10,7 @@ type keyMap struct {
 	Start, Pause, Cancel     key.Binding
 	Retry, Remove, New       key.Binding
 	Detail, Close            key.Binding
+	Why, CloseError          key.Binding
 	MoveUp, MoveDown         key.Binding
 	Search, ClearFilter      key.Binding
 	Mark, MarkAll            key.Binding
@@ -45,6 +46,8 @@ func newKeyMap() keyMap {
 		MoveDown:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "move down")),
 		Detail:       key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details")),
 		Close:        key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close details")),
+		Why:          key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "why it failed")),
+		CloseError:   key.NewBinding(key.WithKeys("esc", "i", "q"), key.WithHelp("esc/i/q", "close")),
 		Search:       key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		ClearFilter:  key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear filter")),
 		Mark:         key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "mark")),

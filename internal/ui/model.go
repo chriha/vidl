@@ -82,6 +82,7 @@ type Model struct {
 	detail  bool           // detail panel open
 	log     viewport.Model // yt-dlp output in the detail panel
 	dialog  *newDialog     // new-download dialog, nil when closed
+	errView *errorView     // full-screen error view, nil when closed
 	toast   toast
 
 	filter [tabCount]string // search query per tab
@@ -543,9 +544,14 @@ func (m Model) tabBar() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 }
 
-func (m Model) footer() string {
+// helpKeys is the key help for the current state.
+func (m Model) helpKeys() tabKeys {
 	_, detail := m.detailItem()
-	footer := m.statusLine() + "\n" + m.help.View(tabKeys{m.keys, m.tab, detail, m.filtering(), m.markCount() > 0})
+	return tabKeys{keyMap: m.keys, tab: m.tab, detail: detail, filtering: m.filtering(), marked: m.markCount() > 0}
+}
+
+func (m Model) footer() string {
+	footer := m.statusLine() + "\n" + m.help.View(m.helpKeys())
 	if err := m.mgr.SaveError(); err != nil {
 		footer = errorStyle.Render(" saving queue: "+err.Error()) + "\n" + footer
 	}
