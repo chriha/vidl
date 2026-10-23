@@ -132,9 +132,12 @@ func TestFormatArgs(t *testing.T) {
 		res  string
 		want []string
 	}{
-		{MP4, "1080", []string{"-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]", "--merge-output-format", "mp4"}},
-		{MKV, "best", []string{"-f", "bv*+ba/b", "--merge-output-format", "mkv"}},
+		{MP4, "best", []string{"-f", "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b", "--merge-output-format", "mp4"}},
+		{MP4, "1080", []string{"-f", "bv*[height<=1080][vcodec^=avc1]+ba[acodec^=mp4a]/bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]", "--merge-output-format", "mp4"}},
+		{MKV, "best", []string{"-f", "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/bv*+ba/b", "--merge-output-format", "mkv"}},
+		{MKV, "720", []string{"-f", "bv*[height<=720][vcodec^=avc1]+ba[acodec^=mp4a]/bv*[height<=720]+ba/b[height<=720]", "--merge-output-format", "mkv"}},
 		{WebM, "", []string{"-f", "bv*[ext=webm]+ba[ext=webm]/bv*+ba/b", "--merge-output-format", "webm"}},
+		{WebM, "480", []string{"-f", "bv*[height<=480][ext=webm]+ba[ext=webm]/bv*[height<=480]+ba/b[height<=480]", "--merge-output-format", "webm"}},
 		{MP3, "720", []string{"-f", "ba/b", "-x", "--audio-format", "mp3"}},
 	}
 	for _, tt := range tests {
