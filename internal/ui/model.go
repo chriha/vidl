@@ -59,6 +59,9 @@ type confirmation struct {
 	verb     string // label of y
 	action   func() error
 	done     string // notice shown after the action succeeded, optional
+
+	marked []string   // ids a bulk action applies to instead of action
+	bulk   bulkAction // set for bulk actions on marked rows
 }
 
 // Model is the root Bubble Tea model.
@@ -283,13 +286,21 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, k.HalfPageUp):
 		m.moveCursor(-max(m.tableRows()/2, 1))
 	case key.Matches(msg, k.Start):
-		m.act(m.mgr.Start)
+		if !m.bulk(bulkStart) {
+			m.act(m.mgr.Start)
+		}
 	case key.Matches(msg, k.Pause):
-		m.act(m.pauseOrRequeue)
+		if !m.bulk(bulkPause) {
+			m.act(m.pauseOrRequeue)
+		}
 	case key.Matches(msg, k.Cancel):
-		m.act(m.mgr.Cancel)
+		if !m.bulk(bulkCancel) {
+			m.act(m.mgr.Cancel)
+		}
 	case key.Matches(msg, k.Retry):
-		m.retrySelected()
+		if !m.bulk(bulkRetry) {
+			m.retrySelected()
+		}
 	case key.Matches(msg, k.MoveUp):
 		m.act(func(id string) error { return m.mgr.Move(id, -1) })
 		m.refresh()
@@ -341,7 +352,9 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case "y", "Y":
 		c := m.confirm
 		m.confirm = nil
-		if err := c.action(); err != nil {
+		if c.bulk != nil {
+			m.applyMarked(c.marked, c.bulk)
+		} else if err := c.action(); err != nil {
 			m.report(err)
 		} else if c.done != "" {
 			m.notice(c.done)
@@ -357,6 +370,10 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 
 func (m *Model) askRemove() {
 	if !m.hasTable() {
+		return
+	}
+	if m.markCount() > 0 {
+		m.askRemoveMarked()
 		return
 	}
 	it, ok := m.selected()
