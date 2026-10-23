@@ -74,6 +74,15 @@ type tabKeys struct {
 	detail    bool // detail panel open
 	filtering bool // a search filter is active
 	marked    bool // rows are marked on this tab
+	failed    bool // the selected download failed
+	errorView bool // the error view is open
+}
+
+// whyKey is i, shown only when the selected download failed.
+func (k tabKeys) whyKey() key.Binding {
+	b := k.Why
+	b.SetEnabled(k.failed)
+	return b
 }
 
 // detailKey is enter to open the panel, or esc to close it once it's open.
@@ -113,9 +122,12 @@ func (k tabKeys) escKeys() []key.Binding {
 }
 
 func (k tabKeys) ShortHelp() []key.Binding {
+	if k.errorView {
+		return []key.Binding{k.Up, k.Down, k.Top, k.Bottom, k.HalfPageDown, k.HalfPageUp, k.CloseError}
+	}
 	switch k.tab {
 	case tabDownloads:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Cancel, k.Browse, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.whyKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Cancel, k.Browse, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
 	case tabFinished:
 		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Open, k.Reveal, k.Browse, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
 	case tabSettings:
@@ -128,9 +140,12 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 	nav := []key.Binding{k.Up, k.Down, k.Top, k.Bottom, k.HalfPageDown, k.HalfPageUp}
 	tabs := []key.Binding{k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3}
 	general := []key.Binding{k.New, k.Help, k.Quit}
+	if k.errorView {
+		return [][]key.Binding{nav, {k.CloseError}}
+	}
 	switch k.tab {
 	case tabDownloads:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Browse, k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.whyKey(), k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Browse, k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
 		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.Browse, k.redownloadKey(), k.Remove, k.ClearHistory}, tabs, general}
 	case tabSettings:

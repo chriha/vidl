@@ -175,6 +175,7 @@ func (m *Model) follow() {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	next.syncLog()
+	next.syncErrorView()
 	if next.toast.seq != m.toast.seq && next.toast.text != "" {
 		d := toastDuration
 		if next.toast.long {
@@ -235,6 +236,9 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
+		if m.errView != nil {
+			return m.handleErrorViewKey(msg)
+		}
 		if m.confirm != nil {
 			return m.handleConfirmKey(msg)
 		}
@@ -335,6 +339,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.cycleStatus()
 	case key.Matches(msg, k.New):
 		return m, m.openDialog()
+	case key.Matches(msg, k.Why):
+		m.openErrorView()
 	case key.Matches(msg, k.Detail):
 		if _, ok := m.selected(); ok || m.detail {
 			m.detail = !m.detail
@@ -547,7 +553,11 @@ func (m Model) tabBar() string {
 // helpKeys is the key help for the current state.
 func (m Model) helpKeys() tabKeys {
 	_, detail := m.detailItem()
-	return tabKeys{keyMap: m.keys, tab: m.tab, detail: detail, filtering: m.filtering(), marked: m.markCount() > 0}
+	it, ok := m.selected()
+	return tabKeys{
+		keyMap: m.keys, tab: m.tab, detail: detail, filtering: m.filtering(), marked: m.markCount() > 0,
+		failed: ok && it.Status == queue.Failed, errorView: m.errView != nil,
+	}
 }
 
 func (m Model) footer() string {
@@ -600,6 +610,9 @@ func (m Model) render() string {
 	}
 	if m.filtering() {
 		body = m.filterLine() + "\n" + body
+	}
+	if m.errView != nil {
+		body = lipgloss.NewStyle().PaddingLeft(1).Render(m.errView.vp.View())
 	}
 	body = lipgloss.NewStyle().Height(bodyHeight).MaxHeight(bodyHeight).Render(body)
 	if t := m.toastView(); t != "" {

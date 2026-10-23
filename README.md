@@ -40,6 +40,9 @@ downloads resume where they stopped.
   subtitle overrides, progress per stream, timestamps, output and partial
   files, errors, and yt-dlp's latest output
   for running or failed downloads.
+- **Error view** (`i`) for a failed download: the full error and yt-dlp's
+  output, full-screen and scrollable. Failed downloads keep their last 200
+  output lines across restarts.
 - **Desktop notifications** when a download finishes or fails. Downloads
   ending within about two seconds of each other share one notification.
 - **`vidl add`** hands URLs to the running vidl from scripts or browser
@@ -272,6 +275,7 @@ automatically the next time you start vidl.
 | `u` / `d`             | Move queued download up / down                      |
 | `r`                   | Remove (asks for confirmation)                      |
 | `enter`               | Toggle the detail panel                             |
+| `i`                   | Show why the download failed (`esc`/`i`/`q` close)  |
 | `space`               | Mark or unmark the download (actions apply to all)  |
 | `V`                   | Mark all visible downloads, or unmark them all      |
 | `esc`                 | Close the detail panel, then clear marks, filters   |
