@@ -304,6 +304,17 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if !m.bulk(bulkPause) {
 			m.act(m.pauseOrRequeue)
 		}
+	case key.Matches(msg, k.Hold):
+		if m.tab == tabSettings {
+			break
+		}
+		held := !m.mgr.Held()
+		m.mgr.SetHeld(held)
+		if held {
+			m.notice("Queue held — running downloads will finish")
+		} else {
+			m.notice("Queue resumed")
+		}
 	case key.Matches(msg, k.Cancel):
 		if !m.bulk(bulkCancel) {
 			m.act(m.mgr.Cancel)
