@@ -24,11 +24,11 @@ var statusColors = map[queue.Status]color.Color{
 var downloadColumns = []column{
 	{title: "#", width: 3, right: true},
 	{title: "Title", flex: 1, min: 16},
-	{title: "Status", width: 11},
+	{title: "Status", width: 11, drop: 1}, // the bar's color still shows it
 	{title: "Progress", width: 22},
-	{title: "Speed", width: 10, right: true, drop: 1},
-	{title: "ETA", width: 7, right: true, drop: 2},
-	{title: "Size", width: 9, right: true, drop: 3},
+	{title: "Speed", width: 10, right: true, drop: 2},
+	{title: "ETA", width: 7, right: true, drop: 3},
+	{title: "Size", width: 9, right: true, drop: 4},
 }
 
 func downloadCells(i int, it queue.Item) []cell {

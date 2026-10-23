@@ -30,8 +30,8 @@ func settingsModel(t *testing.T, label string) Model {
 // saved reads the config file the model saves to.
 func saved(t *testing.T, m Model) config.Config {
 	t.Helper()
-	if m.err != nil {
-		t.Fatal(m.err)
+	if m.toast.err != nil {
+		t.Fatal(m.toast.err)
 	}
 	cfg, err := config.Load(m.cfgPath)
 	if err != nil {
@@ -227,7 +227,7 @@ func TestSettingsSaveErrorShown(t *testing.T) {
 	}
 	m.cfgPath = filepath.Join(blocker, "config.toml")
 	m = press(t, m, "space")
-	if m.err == nil {
+	if m.toast.err == nil {
 		t.Fatal("no save error")
 	}
 	if m.mgr.Config().EmbedMetadata {

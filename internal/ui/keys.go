@@ -11,6 +11,9 @@ type keyMap struct {
 	Retry, Remove, New       key.Binding
 	Detail, Close            key.Binding
 	MoveUp, MoveDown         key.Binding
+	Search, ClearFilter      key.Binding
+	Open, Reveal             key.Binding
+	ClearHistory             key.Binding
 	Edit, Toggle             key.Binding
 	Decrease, Increase       key.Binding
 	Help, Quit               key.Binding
@@ -39,6 +42,11 @@ func newKeyMap() keyMap {
 		MoveDown:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "move down")),
 		Detail:       key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details")),
 		Close:        key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close details")),
+		Search:       key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
+		ClearFilter:  key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear search")),
+		Open:         key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open file")),
+		Reveal:       key.NewBinding(key.WithKeys("O"), key.WithHelp("O", "show in folder")),
+		ClearHistory: key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "clear history")),
 		Edit:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit")),
 		Toggle:       key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
 		Decrease:     key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/←", "decrease")),
@@ -51,8 +59,9 @@ func newKeyMap() keyMap {
 // tabKeys adapts the help to the current tab.
 type tabKeys struct {
 	keyMap
-	tab    tab
-	detail bool // detail panel open
+	tab       tab
+	detail    bool // detail panel open
+	filtering bool // a search filter is active
 }
 
 // detailKey is enter to open the panel, or esc to close it once it's open.
@@ -63,12 +72,29 @@ func (k tabKeys) detailKey() key.Binding {
 	return k.Detail
 }
 
+// searchKey is / to search, or esc to clear the filter when esc does that.
+func (k tabKeys) searchKey() key.Binding {
+	if k.filtering && !k.detail {
+		return k.ClearFilter
+	}
+	return k.Search
+}
+
+// escKeys is esc's current meaning: closing the panel, then clearing the
+// filter.
+func (k tabKeys) escKeys() []key.Binding {
+	if k.filtering {
+		return []key.Binding{k.Close, k.ClearFilter}
+	}
+	return []key.Binding{k.Close}
+}
+
 func (k tabKeys) ShortHelp() []key.Binding {
 	switch k.tab {
 	case tabDownloads:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.NextTab, k.Help, k.Quit}
 	case tabFinished:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Remove, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Open, k.Reveal, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
 	case tabSettings:
 		return []key.Binding{k.Up, k.Down, k.Edit, k.Decrease, k.Increase, k.NextTab, k.Help, k.Quit}
 	}
@@ -81,9 +107,9 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 	general := []key.Binding{k.New, k.Help, k.Quit}
 	switch k.tab {
 	case tabDownloads:
-		return [][]key.Binding{nav, {k.Detail, k.Close}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
-		return [][]key.Binding{nav, {k.Detail, k.Close, k.Remove}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Open, k.Reveal, k.Remove, k.ClearHistory}, tabs, general}
 	case tabSettings:
 		return [][]key.Binding{{k.Up, k.Down, k.Top, k.Bottom}, {k.Edit, k.Toggle, k.Decrease, k.Increase}, {k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3}, general}
 	}

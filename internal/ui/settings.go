@@ -292,10 +292,11 @@ func (m *Model) applySetting(s setting, v string) {
 	s.set(&cfg, v)
 	cfg = cfg.Normalize()
 	m.mgr.SetConfig(cfg)
-	m.err = nil
 	if err := config.Save(m.cfgPath, cfg); err != nil {
-		m.err = fmt.Errorf("saving settings: %w", err)
+		m.report(fmt.Errorf("saving settings: %w", err))
+		return
 	}
+	m.report(nil)
 }
 
 func (m Model) settingValueWidth() int {

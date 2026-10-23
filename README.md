@@ -9,11 +9,8 @@ resolution, and it downloads in the background with progress, speed and ETA
 for every item. The queue and history survive restarts, and interrupted
 downloads resume where they stopped.
 
-> **Status:** early development. The download engine, queue, persistence and
-> configuration are complete and tested, and so are the Downloads and Finished
-> tables, the detail panel, the new-download dialog and the settings tab;
-> search, opening files and the status footer are in progress.
-> See [Roadmap](#roadmap) for what works today.
+> **Status:** feature complete for a first release; everything on the
+> [Roadmap](#roadmap) works. The UI is tested manually on macOS.
 
 ## Features
 
@@ -28,7 +25,11 @@ downloads resume where they stopped.
 - **Pause, resume, cancel and retry.** Pausing keeps partial files so the
   download resumes; cancelling deletes them.
 - **Reordering**: move waiting downloads up and down the queue.
-- **Finished history** of completed downloads with their file paths.
+- **Finished history** of completed downloads: open a file or show it in
+  its folder, and clear the history.
+- **Search** to filter downloads and history by title or URL.
+- **Status line** with the total speed and the number of downloads per
+  status, and the overall progress in the terminal's window title.
 - **Detail panel** for any download: source, format, progress per stream,
   timestamps, output and partial files, errors, and yt-dlp's latest output
   for running or failed downloads.
@@ -129,34 +130,53 @@ settings. Pasting several URLs at once offers to queue them all with the
 default format and resolution, without fetching details first. While the
 dialog is open, other keys are disabled; `ctrl+c` still quits.
 
+Press `/` to search the current tab: the list narrows to downloads whose
+title or URL contains what you type, ignoring case. `enter` keeps the filter
+and returns to the list, `esc` clears it. Actions apply to the filtered list,
+and `X` on a filtered Finished tab removes only the matching downloads from
+the history.
+
+On the Finished tab, `o` opens a file with its default application and `O`
+shows it in Finder (macOS) or opens its folder (Linux). Removing downloads
+from the history never deletes their files.
+
+The line above the help shows the total download speed and how many downloads
+are running, queued, paused, failed or cancelled. Short messages and errors
+appear in the bottom right corner for a few seconds. While downloading, the
+terminal's window title (and, in terminals that support it, its progress
+indicator) shows the overall progress. vidl needs at least 40×8 cells; on
+narrower terminals the table drops the size, ETA, speed and status columns,
+in that order.
+
 Quitting stops running downloads and keeps their partial files; they continue
 automatically the next time you start vidl.
 
 ## Keybindings
 
-| Key                   | Action                                         | Status  |
-| --------------------- | ---------------------------------------------- | ------- |
-| `j` / `↓`             | Move down                                      | ✅      |
-| `k` / `↑`             | Move up                                        | ✅      |
-| `g` / `G`             | Jump to top / bottom                           | ✅      |
-| `ctrl+d` / `ctrl+u`   | Half page down / up                            | ✅      |
-| `tab` / `l`           | Next tab                                       | ✅      |
-| `shift+tab` / `h`     | Previous tab                                   | ✅      |
-| `1` `2` `3`           | Go to Downloads / Finished / Settings          | ✅      |
-| `s`                   | Start or resume; retries failed or cancelled   | ✅      |
-| `p`                   | Pause                                          | ✅      |
-| `c`                   | Cancel (deletes partial files)                 | ✅      |
-| `enter`               | Toggle the detail panel                        | ✅      |
-| `esc`                 | Close the detail panel                         | ✅      |
-| `n`                   | New download                                   | ✅      |
-| `r`                   | Remove (asks for confirmation)                 | ✅      |
-| `u` / `d`             | Move queued download up / down                 | ✅      |
-| `/`                   | Search / filter                                | planned |
-| `R`                   | Retry failed or cancelled download             | ✅      |
-| `o`                   | Open file (Finished tab)                       | planned |
-| `X`                   | Clear finished history                         | planned |
-| `?`                   | Toggle full help                               | ✅      |
-| `q` / `ctrl+c`        | Quit                                           | ✅      |
+| Key                   | Action                                              |
+| --------------------- | --------------------------------------------------- |
+| `j` / `↓`             | Move down                                           |
+| `k` / `↑`             | Move up                                             |
+| `g` / `G`             | Jump to top / bottom                                |
+| `ctrl+d` / `ctrl+u`   | Half page down / up                                 |
+| `tab` / `l`           | Next tab                                            |
+| `shift+tab` / `h`     | Previous tab                                        |
+| `1` `2` `3`           | Go to Downloads / Finished / Settings               |
+| `s`                   | Start or resume; retries failed or cancelled        |
+| `p`                   | Pause                                               |
+| `c`                   | Cancel (deletes partial files)                      |
+| `R`                   | Retry failed or cancelled download                  |
+| `u` / `d`             | Move queued download up / down                      |
+| `r`                   | Remove (asks for confirmation)                      |
+| `enter`               | Toggle the detail panel                             |
+| `esc`                 | Close the detail panel, then clear the search       |
+| `/`                   | Search the current tab by title or URL              |
+| `o`                   | Open the file (Finished tab)                        |
+| `O`                   | Show the file in its folder (Finished tab)          |
+| `X`                   | Clear finished history (asks for confirmation)      |
+| `n`                   | New download                                        |
+| `?`                   | Toggle full help                                    |
+| `q` / `ctrl+c`        | Quit                                                |
 
 On the Settings tab, `j`/`k` move between settings, `h`/`l` (or `←`/`→`)
 change the concurrency and cycle through choices, `space` or `enter` toggles
@@ -331,7 +351,8 @@ directly to see whether the problem is the site or vidl.
 - [x] New-download dialog with format and resolution selection, playlist
       expansion and multi-URL paste
 - [x] Settings tab
-- [ ] Open file, clear history, global speed footer, search
+- [x] Open file, clear history, search, status line, toasts, window title
+      progress, small-terminal handling
 
 ## License
 
