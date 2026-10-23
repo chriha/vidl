@@ -1,0 +1,21 @@
+{
+  "queue": [
+    {
+      "id": "0123456789abcdef",
+      "url": "a",
+      "title": "title of a",
+      "format": "mp4",
+      "resolution": "1080",
+      "status": "paused",
+      "progress": {
+        "percent": 50
+      },
+      "part_files": [
+        "/dl/a.mp4.part"
+      ],
+      "added_at": "2026-10-01T10:00:00Z",
+      "started_at": "2026-10-01T10:00:01Z"
+    }
+  ],
+  "history": null
+}

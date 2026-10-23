@@ -39,6 +39,11 @@ type NewItem struct {
 	Extractor  string
 	Format     ytdlp.Format
 	Resolution string
+
+	// Optional overrides of the settings; zero values follow the settings.
+	Clip      ytdlp.Clip // single videos only
+	Template  string     // filename template
+	Subtitles *bool      // embed subtitles
 }
 
 // Manager owns the download queue and history. Queued items start
@@ -164,6 +169,12 @@ func (m *Manager) Add(reqs ...NewItem) []string {
 			Resolution: r.Resolution,
 			Status:     Queued,
 			AddedAt:    time.Now(),
+			ClipStart:  r.Clip.Start,
+			ClipEnd:    r.Clip.End,
+			Template:   r.Template,
+		}
+		if r.Subtitles != nil {
+			it.Subtitles = new(*r.Subtitles)
 		}
 		if !it.Format.Valid() {
 			it.Format = m.cfg.DefaultFormat
@@ -382,18 +393,27 @@ func (m *Manager) startLocked(it *Item) {
 
 func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 	c := m.cfg
+	template := c.FilenameTemplate
+	if it.Template != "" {
+		template = it.Template
+	}
+	subtitles := c.EmbedSubtitles
+	if it.Subtitles != nil {
+		subtitles = *it.Subtitles
+	}
 	return ytdlp.Job{
 		URL:                it.URL,
 		Dir:                c.DownloadPath(),
-		Template:           c.FilenameTemplate,
+		Template:           template,
 		Format:             it.Format,
 		Resolution:         it.Resolution,
-		EmbedSubtitles:     c.EmbedSubtitles,
+		EmbedSubtitles:     subtitles,
 		SubtitleLangs:      c.SubtitleLangs,
 		EmbedThumbnail:     c.EmbedThumbnail,
 		EmbedMetadata:      c.EmbedMetadata,
 		RateLimit:          c.RateLimit,
 		CookiesFromBrowser: c.CookiesFromBrowser,
+		Clip:               it.Clip(),
 		ForceOverwrites:    it.redownload(),
 	}
 }
