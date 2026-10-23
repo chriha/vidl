@@ -57,6 +57,12 @@ func downloadCells(i int, it queue.Item) []cell {
 	return cells
 }
 
+// sizeLabel is the Size cell of a download: the exact total once yt-dlp
+// reports it, else a dimmed "~" estimate, else "–".
+func sizeLabel(it queue.Item) (string, lipgloss.Style) {
+	return "", lipgloss.NewStyle()
+}
+
 var finishedColumns = []column{
 	{title: "Title", flex: 2, min: 16},
 	{title: "Format", width: 6, drop: 1},

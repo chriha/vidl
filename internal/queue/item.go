@@ -63,6 +63,10 @@ type Item struct {
 	AddedAt    time.Time      `json:"added_at"`
 	StartedAt  time.Time      `json:"started_at,omitzero"`
 	FinishedAt time.Time      `json:"finished_at,omitzero"`
+
+	// EstimatedSize is yt-dlp's size estimate in bytes before the download
+	// starts; 0 when unknown. Progress.Total replaces it once known.
+	EstimatedSize int64 `json:"estimated_size,omitempty"`
 }
 
 // DisplayTitle is the title, or the URL while the title is still unknown.
