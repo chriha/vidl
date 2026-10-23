@@ -161,6 +161,11 @@ func (m Model) detailFields(it queue.Item, w int) []string {
 	add("URL", it.URL)
 	add("Source", joinNonEmpty(it.Uploader, it.Extractor, durationLabel(it.Duration)))
 	add("Format", joinNonEmpty(string(it.Format), resolutionLabel(it)))
+	add("Clip", clipLabel(it))
+	add("Template", it.Template)
+	if it.Subtitles != nil {
+		add("Subtitles", map[bool]string{true: "embedded", false: "off"}[*it.Subtitles])
+	}
 	if it.Status == queue.Finished {
 		if it.Size > 0 {
 			add("Size", humanBytes(it.Size))
@@ -209,6 +214,22 @@ func progressLabel(it queue.Item) string {
 		}
 	}
 	return strings.Join(parts, " · ")
+}
+
+// clipLabel is the item's clip range ("1:30 – end"), or "" for the whole video.
+func clipLabel(it queue.Item) string {
+	clip := it.Clip()
+	if clip.IsZero() {
+		return ""
+	}
+	start, end := "0:00", "end"
+	if clip.Start > 0 {
+		start = humanDuration(clip.Start)
+	}
+	if clip.End > 0 {
+		end = humanDuration(clip.End)
+	}
+	return start + " – " + end
 }
 
 // resolutionLabel is the item's resolution ("1080p", "best"), or "" for audio.

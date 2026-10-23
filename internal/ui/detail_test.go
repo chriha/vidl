@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -114,6 +115,39 @@ func TestDetailFields(t *testing.T) {
 	}
 	if errLines < 2 {
 		t.Errorf("error not wrapped (%d lines)", errLines)
+	}
+}
+
+func TestDetailFieldsOverrides(t *testing.T) {
+	off, on := false, true
+	for _, tc := range []struct {
+		name    string
+		it      queue.Item
+		want    []string
+		notWant []string
+	}{
+		{"none", queue.Item{URL: "u"}, nil, []string{"Clip", "Template", "Subtitles"}},
+		{"clip", queue.Item{URL: "u", ClipStart: 90 * time.Second, ClipEnd: 2*time.Hour + 5*time.Second}, []string{"Clip      1:30 – 2:00:05"}, []string{"Template", "Subtitles"}},
+		{"open start", queue.Item{URL: "u", ClipEnd: 45 * time.Second}, []string{"Clip      0:00 – 0:45"}, nil},
+		{"open end", queue.Item{URL: "u", ClipStart: 30 * time.Second}, []string{"Clip      0:30 – end"}, nil},
+		{"template", queue.Item{URL: "u", Template: "%(id)s.%(ext)s"}, []string{"Template  %(id)s.%(ext)s"}, []string{"Clip", "Subtitles"}},
+		{"subtitles off", queue.Item{URL: "u", Subtitles: &off}, []string{"Subtitles off"}, nil},
+		{"subtitles on", queue.Item{URL: "u", Subtitles: &on}, []string{"Subtitles embedded"}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var m Model
+			text := ansi.Strip(strings.Join(m.detailFields(tc.it, 80), "\n"))
+			for _, w := range tc.want {
+				if !strings.Contains(text, w) {
+					t.Errorf("missing %q in:\n%s", w, text)
+				}
+			}
+			for _, w := range tc.notWant {
+				if strings.Contains(text, w) {
+					t.Errorf("unexpected %q in:\n%s", w, text)
+				}
+			}
+		})
 	}
 }
 

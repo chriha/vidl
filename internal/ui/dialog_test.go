@@ -248,8 +248,8 @@ func TestDialogAudioDisablesResolution(t *testing.T) {
 	m = update(t, m, res)
 	m = press(t, m, "h") // mp4 → opus
 	m = press(t, m, "tab")
-	if m.dialog.focus != focusFormat {
-		t.Error("focus moved to the resolution of an audio format")
+	if m.dialog.focus != focusClipStart {
+		t.Errorf("tab from an audio format: focus = %d, want the clip start (resolution skipped)", m.dialog.focus)
 	}
 }
 
@@ -262,5 +262,175 @@ func TestDefaultResolution(t *testing.T) {
 	}
 	if got := availableResolutions([]int{1920, 1080}); !slices.Equal(got, []string{"best", "1440", "1080", "720", "480", "360"}) {
 		t.Errorf("availableResolutions = %v", got)
+	}
+}
+
+// probeDetails opens the dialog, probes url and returns the model at the
+// details step.
+func probeDetails(t *testing.T, p *fakeProber, url string) (Model, *queue.Manager) {
+	t.Helper()
+	m, mgr := newDialogModel(t, p)
+	m.dialog.input.SetValue(url)
+	m, res := submit(t, m)
+	m = update(t, m, res)
+	if m.dialog.step != stepDetails {
+		t.Fatalf("step = %d, err = %v", m.dialog.step, m.dialog.err)
+	}
+	return m, mgr
+}
+
+// focusOrder presses tab n times and returns the focused field after each.
+func focusOrder(t *testing.T, m Model, n int) []int {
+	t.Helper()
+	var got []int
+	for range n {
+		m = press(t, m, "tab")
+		got = append(got, m.dialog.focus)
+	}
+	return got
+}
+
+func shiftTab(t *testing.T, m Model) Model {
+	t.Helper()
+	return update(t, m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+}
+
+func TestDialogFieldNavigation(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V"}}}
+	m, _ := probeDetails(t, p, "https://x.test/v")
+	want := []int{focusResolution, focusClipStart, focusClipEnd, focusTemplate, focusSubtitles, focusFormat}
+	if got := focusOrder(t, m, len(want)); !slices.Equal(got, want) {
+		t.Errorf("tab order = %v, want %v", got, want)
+	}
+	if m = shiftTab(t, m); m.dialog.focus != focusSubtitles {
+		t.Errorf("shift+tab from the type: focus = %d, want subtitles", m.dialog.focus)
+	}
+	if m = press(t, m, "k"); m.dialog.focus != focusTemplate {
+		t.Errorf("k from subtitles: focus = %d, want template", m.dialog.focus)
+	}
+	// In a text field, letters are typed instead of moving the focus.
+	m.dialog.template.SetValue("")
+	m = typeText(t, m, "jkhl")
+	if m.dialog.focus != focusTemplate || m.dialog.template.Value() != "jkhl" {
+		t.Errorf("focus = %d, template = %q; want letters typed into the template", m.dialog.focus, m.dialog.template.Value())
+	}
+}
+
+func TestDialogOverridesQueued(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V", URL: "https://x.test/v"}}}
+	m, _ := probeDetails(t, p, "https://x.test/v")
+	cfg := m.mgr.Config()
+	if d := m.dialog; d.template.Value() != cfg.FilenameTemplate || d.subtitles != cfg.EmbedSubtitles {
+		t.Fatalf("defaults: template %q, subtitles %v; want the settings", d.template.Value(), d.subtitles)
+	}
+	m = press(t, m, "tab", "tab")
+	m = typeText(t, m, "1:30")
+	m = press(t, m, "tab")
+	m = typeText(t, m, "2:00")
+	m = press(t, m, "tab")
+	m.dialog.template.SetValue("%(id)s.%(ext)s")
+	m = press(t, m, "tab", "space", "enter")
+	if m.dialog != nil {
+		t.Fatalf("dialog still open: err = %v", m.dialog.err)
+	}
+	it, _ := m.selected()
+	if it.ClipStart != 90*time.Second || it.ClipEnd != 120*time.Second {
+		t.Errorf("clip = %v-%v, want 1m30s-2m0s", it.ClipStart, it.ClipEnd)
+	}
+	if it.Template != "%(id)s.%(ext)s" {
+		t.Errorf("template = %q", it.Template)
+	}
+	if it.Subtitles == nil || *it.Subtitles != !cfg.EmbedSubtitles {
+		t.Errorf("subtitles = %v, want %v", it.Subtitles, !cfg.EmbedSubtitles)
+	}
+}
+
+func TestDialogUnchangedFieldsFollowSettings(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V", URL: "https://x.test/v"}}}
+	for name, edit := range map[string]func(*newDialog){
+		"untouched":      func(*newDialog) {},
+		"empty template": func(d *newDialog) { d.template.SetValue("  ") },
+		"toggled back":   func(d *newDialog) {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m, _ := probeDetails(t, p, "https://x.test/v")
+			edit(m.dialog)
+			if name == "toggled back" {
+				m = shiftTab(t, m)
+				m = press(t, m, "space", "space")
+			}
+			m = press(t, m, "enter")
+			it, _ := m.selected()
+			if it.Template != "" || it.Subtitles != nil || !it.Clip().IsZero() {
+				t.Errorf("overrides stored: template %q, subtitles %v, clip %+v", it.Template, it.Subtitles, it.Clip())
+			}
+		})
+	}
+}
+
+func TestDialogClipValidation(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V", URL: "https://x.test/v"}}}
+	for _, tc := range []struct {
+		start, end string
+		ok         bool
+	}{
+		{"", "", true},
+		{"1:30", "", true},
+		{"", "45", true},
+		{"0:10", "1:00:00", true},
+		{"abc", "", false},
+		{"", "1:60", false},
+		{"-5", "", false},
+		{"1:30", "1:30", false},
+		{"2:00", "1:00", false},
+	} {
+		t.Run(tc.start+"_"+tc.end, func(t *testing.T) {
+			m, mgr := probeDetails(t, p, "https://x.test/v")
+			m.dialog.clipStart.SetValue(tc.start)
+			m.dialog.clipEnd.SetValue(tc.end)
+			m = press(t, m, "enter")
+			q, _ := mgr.Snapshot()
+			if tc.ok {
+				if m.dialog != nil || len(q) != 1 {
+					t.Errorf("not queued: queue = %d items", len(q))
+				}
+				return
+			}
+			if m.dialog == nil || m.dialog.step != stepDetails || m.dialog.err == nil || len(q) != 0 {
+				t.Fatalf("invalid clip queued or no error: queue = %d items", len(q))
+			}
+			m = press(t, m, "tab", "tab")
+			m = typeText(t, m, "1")
+			if m.dialog.err != nil {
+				t.Errorf("error kept after editing a clip field: %v", m.dialog.err)
+			}
+		})
+	}
+}
+
+func TestDialogPlaylistOverrides(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{
+		"https://x.test/pl": {Title: "List", IsPlaylist: true, Entries: []ytdlp.Entry{
+			{Title: "One", URL: "https://x.test/1"},
+			{Title: "Two", URL: "https://x.test/2"},
+		}},
+	}}
+	m, mgr := probeDetails(t, p, "https://x.test/pl")
+	want := []int{focusResolution, focusTemplate, focusSubtitles, focusFormat}
+	if got := focusOrder(t, m, len(want)); !slices.Equal(got, want) {
+		t.Errorf("tab order = %v, want %v (no clip fields)", got, want)
+	}
+	m.dialog.clipStart.SetValue("1:00") // hidden, so ignored
+	m = press(t, m, "tab", "tab")
+	m.dialog.template.SetValue("%(playlist_index)s.%(ext)s")
+	m = press(t, m, "tab", "l", "enter")
+	q, _ := mgr.Snapshot()
+	if m.dialog != nil || len(q) != 2 {
+		t.Fatalf("dialog = %v, queue = %d items", m.dialog, len(q))
+	}
+	for _, it := range q {
+		if it.Template != "%(playlist_index)s.%(ext)s" || it.Subtitles == nil || !*it.Subtitles || !it.Clip().IsZero() {
+			t.Errorf("%s: template %q, subtitles %v, clip %+v", it.URL, it.Template, it.Subtitles, it.Clip())
+		}
 	}
 }
