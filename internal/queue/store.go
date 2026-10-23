@@ -78,7 +78,11 @@ type Lock struct {
 // Lock takes the instance lock next to s.Path without waiting. It fails with
 // ErrLocked while another vidl holds it; call Release when done.
 func (s FileStore) Lock() (*Lock, error) {
-	return nil, errors.New("not implemented")
+	path := s.LockPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	return acquireLock(path)
 }
 
 // LockPath is the instance lock's path, next to s.Path.
@@ -88,15 +92,33 @@ func (s FileStore) LockPath() string {
 
 // Release gives up the lock.
 func (l *Lock) Release() error {
-	return nil
+	return l.release()
 }
 
 // AppendQueued adds queued downloads to the file while no vidl is running:
 // it takes the lock, loads the file, appends and saves, keeping existing
 // items as they are. A missing format or resolution follows cfg. It fails
 // with ErrLocked while a vidl holds the lock.
-func (s FileStore) AppendQueued(cfg config.Config, reqs ...NewItem) ([]string, error) {
-	return nil, errors.New("not implemented")
+func (s FileStore) AppendQueued(cfg config.Config, reqs ...NewItem) (ids []string, err error) {
+	l, err := s.Lock()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, l.Release()) }()
+	st, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+	cfg = cfg.Normalize()
+	for _, r := range reqs {
+		it := newItem(r, cfg)
+		st.Queue = append(st.Queue, *it)
+		ids = append(ids, it.ID)
+	}
+	if err := s.Save(st); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 // MemStore is an in-memory Store, useful for tests.
