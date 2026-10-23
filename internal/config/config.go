@@ -45,6 +45,7 @@ func Default() Config {
 		FilenameTemplate:  "%(title)s [%(id)s].%(ext)s",
 		SubtitleLangs:     "en.*",
 		EmbedMetadata:     true,
+		Notify:            true,
 	}
 }
 

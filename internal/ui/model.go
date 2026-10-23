@@ -95,6 +95,9 @@ type Model struct {
 	notifier  notify.Notifier                       // desktop notifications, nil to disable
 	now       func() time.Time
 
+	ended             []queue.Item // finished or failed downloads awaiting a notification
+	notifyUnavailable bool         // the notifier binary is missing; stop trying
+
 	probeSeq  int                    // id of the latest probe request
 	clipboard func() (string, error) // reads the system clipboard
 }
@@ -139,7 +142,9 @@ func (m Model) waitForChange() tea.Cmd {
 
 // refresh takes a new snapshot and keeps the cursors on their items.
 func (m *Model) refresh() {
+	prev := m.statuses()
 	m.queue, m.history = m.mgr.Snapshot()
+	m.collectEnded(prev)
 	m.pruneMarks()
 	m.follow()
 }
@@ -171,6 +176,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			d = longToastDuration
 		}
 		cmd = tea.Batch(cmd, expireToast(next.toast.seq, d))
+	}
+	if len(m.ended) == 0 && len(next.ended) > 0 {
+		cmd = tea.Batch(cmd, tea.Tick(notifyWindow, func(time.Time) tea.Msg { return notifyFlushMsg{} }))
 	}
 	return next, cmd
 }
@@ -204,6 +212,11 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case versionMsg:
 		m.handleVersion(msg)
+		return m, nil
+	case notifyFlushMsg:
+		return m, m.flushNotifications()
+	case notifiedMsg:
+		m.handleNotified(msg.err)
 		return m, nil
 	}
 	if m.dialog != nil {

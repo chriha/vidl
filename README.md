@@ -35,6 +35,8 @@ downloads resume where they stopped.
 - **Detail panel** for any download: source, format, progress per stream,
   timestamps, output and partial files, errors, and yt-dlp's latest output
   for running or failed downloads.
+- **Desktop notifications** when a download finishes or fails. Downloads
+  ending within about two seconds of each other share one notification.
 - **Persistence**: queue and history are saved on every change; downloads
   running when you quit are resumed on the next start.
 - **Output formats**: mp4, mkv, webm (video) and mp3, m4a, opus (audio only),
@@ -256,6 +258,7 @@ embed_thumbnail = false
 embed_metadata = true
 rate_limit = ""
 cookies_from_browser = ""
+notify = true
 ```
 
 | Key                    | Default                       | Description |
@@ -271,9 +274,19 @@ cookies_from_browser = ""
 | `embed_metadata`       | `true`                        | Write title, uploader, date, etc. into the file. |
 | `rate_limit`           | empty (unlimited)             | Maximum download rate per download, e.g. `500K` or `5M`. |
 | `cookies_from_browser` | empty (disabled)              | Use cookies from `brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari` or `vivaldi`, for private, members-only or age-restricted videos. |
+| `notify`               | `true`                        | Desktop notification when a download finishes or fails. |
 
 Changing settings affects downloads that start afterwards; running downloads
-keep the settings they started with.
+keep the settings they started with. `notify` applies at once.
+
+### Notifications
+
+vidl notifies through `osascript` on macOS, `notify-send` on Linux (in the
+`libnotify-bin` or `libnotify` package) and PowerShell's built-in toast API on Windows.
+If the notifier isn't installed, vidl says so once and doesn't try again
+until the next start. macOS may ask you to allow notifications for your
+terminal app the first time. Windows notifications are best-effort: they
+appear under PowerShell's name and are only tested by hand on macOS.
 
 ### Formats and resolutions
 
@@ -426,6 +439,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Status filter on the Downloads tab (`f`)
 - [x] Open files from the Finished tab on Windows
 - [x] Re-download finished videos (`R`)
+- [x] Desktop notifications for finished and failed downloads
 
 ## License
 
