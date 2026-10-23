@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/chriha/vidl/internal/config"
 	"github.com/chriha/vidl/internal/ipc"
@@ -14,7 +17,7 @@ import (
 // add implements `vidl add`: it hands urls to the running vidl, or appends
 // them to queue.json when none runs.
 func add(dir string, urls []string, out io.Writer) error {
-	if len(urls) == 0 {
+	if len(urls) == 0 || slices.ContainsFunc(urls, func(u string) bool { return strings.HasPrefix(u, "-") }) {
 		return errors.New("usage: vidl add <url> [<url>...]")
 	}
 	err := forward(dir, urls, out)
@@ -34,7 +37,7 @@ func add(dir string, urls []string, out io.Writer) error {
 	}
 	ids, err := store.AppendQueued(cfg, reqs...)
 	if errors.Is(err, queue.ErrLocked) {
-		return notAnswering(dir, store)
+		return forwardToLockHolder(dir, store, urls, out)
 	}
 	if len(ids) > 0 {
 		fmt.Fprintf(out, "Queued %s; they start when vidl runs\n", downloads(len(ids)))
@@ -54,6 +57,26 @@ func forward(dir string, urls []string, out io.Writer) error {
 	}
 	fmt.Fprintf(out, "Added %s to the running vidl\n", downloads(n))
 	return nil
+}
+
+// startupGrace is how long a client waits for the socket of a vidl that holds
+// the lock: a starting vidl takes the lock before it listens.
+const startupGrace = time.Second
+
+// forwardToLockHolder hands urls to the vidl holding the queue lock, waiting
+// up to startupGrace for it to listen.
+func forwardToLockHolder(dir string, store queue.FileStore, urls []string, out io.Writer) error {
+	deadline := time.Now().Add(startupGrace)
+	for {
+		err := forward(dir, urls, out)
+		if !errors.Is(err, ipc.ErrNoServer) {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return notAnswering(dir, store)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // notAnswering is the error for a lock held by a vidl whose socket is gone.

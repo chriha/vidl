@@ -61,7 +61,17 @@ func (f *fakeServer) got() []string {
 
 func serve(t *testing.T, dir string) *fakeServer {
 	t.Helper()
-	f := &fakeServer{}
+	f, stop, err := startServer(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+	return f
+}
+
+// startServer listens on dir's socket; stop shuts it down.
+func startServer(dir string) (f *fakeServer, stop func(), err error) {
+	f = &fakeServer{}
 	srv, err := ipc.Listen(ipc.SocketPath(dir), func(urls []string) (int, error) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -69,12 +79,11 @@ func serve(t *testing.T, dir string) *fakeServer {
 		return len(urls), nil
 	})
 	if err != nil {
-		t.Fatal(err)
+		return nil, nil, err
 	}
 	done := make(chan struct{})
 	go func() { srv.Serve(); close(done) }()
-	t.Cleanup(func() { srv.Close(); <-done })
-	return f
+	return f, func() { srv.Close(); <-done }, nil
 }
 
 func TestRunForwardsToRunningInstance(t *testing.T) {
@@ -197,14 +206,74 @@ func TestAddWithoutInstanceAppendsToQueueFile(t *testing.T) {
 	l.Release()
 }
 
-func TestAddWithoutURLsIsAUsageError(t *testing.T) {
-	_, store := testEnv(t)
-	var out bytes.Buffer
-	if err := run([]string{"add"}, &out); err == nil {
-		t.Fatal("run(add) = nil, want a usage error")
+func TestAddUsageErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"no URLs", []string{"add"}},
+		{"help flag", []string{"add", "--help"}},
+		{"flag among URLs", []string{"add", "https://a", "-h"}},
 	}
-	if _, err := os.Stat(store.Path); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("queue.json written: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, store := testEnv(t)
+			var out bytes.Buffer
+			if err := run(tt.args, &out); err == nil {
+				t.Fatalf("run(%q) = nil, want a usage error", tt.args)
+			}
+			if out.Len() != 0 {
+				t.Errorf("output = %q, want none", out.String())
+			}
+			if _, err := os.Stat(store.Path); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("queue.json written: %v", err)
+			}
+		})
+	}
+}
+
+func TestAddWaitsForStartingInstance(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"vidl url", []string{"https://a"}},
+		{"vidl add", []string{"add", "https://a"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, store := testEnv(t)
+			holdLock(t, store)
+			type started struct {
+				f    *fakeServer
+				stop func()
+				err  error
+			}
+			listening := make(chan started, 1)
+			// The instance holds the lock but listens only after the client's
+			// first attempt, as during startup.
+			time.AfterFunc(100*time.Millisecond, func() {
+				f, stop, err := startServer(dir)
+				listening <- started{f, stop, err}
+			})
+
+			var out bytes.Buffer
+			runErr := run(tt.args, &out)
+			srv := <-listening
+			if srv.err != nil {
+				t.Fatal(srv.err)
+			}
+			t.Cleanup(srv.stop)
+			if runErr != nil {
+				t.Fatalf("run: %v", runErr)
+			}
+			if got := srv.f.got(); !reflect.DeepEqual(got, []string{"https://a"}) {
+				t.Errorf("server got %q", got)
+			}
+			if want := "Added 1 download to the running vidl\n"; out.String() != want {
+				t.Errorf("output = %q, want %q", out.String(), want)
+			}
+		})
 	}
 }
 

@@ -80,11 +80,7 @@ func run(args []string, out io.Writer) error {
 		if len(args) == 0 {
 			return ipc.ErrRunning
 		}
-		err := forward(dir, args, out)
-		if errors.Is(err, ipc.ErrNoServer) {
-			return notAnswering(dir, store)
-		}
-		return err
+		return forwardToLockHolder(dir, store, args, out)
 	}
 	if err != nil {
 		return fmt.Errorf("lock %s: %w", store.LockPath(), err)
