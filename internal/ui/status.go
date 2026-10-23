@@ -58,6 +58,9 @@ func (m Model) statusLine() string {
 	default:
 		line = " " + counts
 	}
+	if m.mgr.Held() {
+		line += dimStyle.Render(" · ") + "queue held"
+	}
 	if marks := m.marksLabel(); marks != "" {
 		line += dimStyle.Render(" · ") + marks
 	}
