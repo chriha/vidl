@@ -59,7 +59,7 @@ type Item struct {
 	Size       int64          `json:"size,omitempty"` // of FilePath, once finished
 	Error      string         `json:"error,omitempty"`
 	PartFiles  []string       `json:"part_files,omitempty"`
-	Log        []string       `json:"-"`
+	Log        []string       `json:"log,omitempty"` // saved for failed items only
 	AddedAt    time.Time      `json:"added_at"`
 	StartedAt  time.Time      `json:"started_at,omitzero"`
 	FinishedAt time.Time      `json:"finished_at,omitzero"`
@@ -90,6 +90,16 @@ func (it *Item) clone() Item {
 	c.Log = slices.Clone(it.Log)
 	if it.Subtitles != nil {
 		c.Subtitles = new(*it.Subtitles)
+	}
+	return c
+}
+
+// saved is the copy that gets persisted: only a failed item keeps its
+// output, so the reason it failed survives a restart.
+func (it *Item) saved() Item {
+	c := it.clone()
+	if c.Status != Failed {
+		c.Log = nil
 	}
 	return c
 }
