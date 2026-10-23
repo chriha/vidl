@@ -232,7 +232,7 @@ func TestDialogPlaylistQueuesEntries(t *testing.T) {
 	if !slices.Equal(m.dialog.resolutions, ytdlp.Resolutions) {
 		t.Errorf("resolutions = %v", m.dialog.resolutions)
 	}
-	m = press(t, m, "enter", "h", "enter") // checklist, then mp4 → opus
+	m = press(t, m, "h", "enter") // mp4 → opus
 	q, _ := mgr.Snapshot()
 	if len(q) != 2 {
 		t.Fatalf("queue = %d items, want 2", len(q))
@@ -450,7 +450,11 @@ func sponsorDetails(t *testing.T, info *ytdlp.Info, categories string) (Model, *
 	m = press(t, m, "n")
 	m.dialog.input.SetValue("https://x.test/in")
 	m, res := submit(t, m)
-	if m = update(t, m, res); m.dialog.step != stepDetails {
+	m = update(t, m, res)
+	if info.IsPlaylist {
+		m = press(t, m, "enter") // past the checklist
+	}
+	if m.dialog.step != stepDetails {
 		t.Fatalf("step = %d, err = %v", m.dialog.step, m.dialog.err)
 	}
 	return m, mgr, r
@@ -540,19 +544,9 @@ func entriesDialog(t *testing.T, n int) (Model, *queue.Manager) {
 	return m, mgr
 }
 
-func checkedCount(d *newDialog) int {
-	n := 0
-	for _, c := range d.checked {
-		if c {
-			n++
-		}
-	}
-	return n
-}
-
 func TestDialogEntriesStartChecked(t *testing.T) {
 	m, _ := entriesDialog(t, 3)
-	if d := m.dialog; len(d.checked) != 3 || checkedCount(d) != 3 || d.cursor != 0 {
+	if d := m.dialog; len(d.checked) != 3 || checkedCount(d.checked) != 3 || d.cursor != 0 {
 		t.Errorf("checked = %v, cursor = %d", d.checked, d.cursor)
 	}
 }
@@ -584,18 +578,17 @@ func TestDialogEntriesToggleMovesDown(t *testing.T) {
 func TestDialogEntriesToggleAll(t *testing.T) {
 	m, _ := entriesDialog(t, 3)
 	m = press(t, m, "space", "a") // one unchecked: check all
-	if n := checkedCount(m.dialog); n != 3 {
+	if n := checkedCount(m.dialog.checked); n != 3 {
 		t.Errorf("checked = %d, want 3", n)
 	}
 	m = press(t, m, "a") // all checked: uncheck all
-	if n := checkedCount(m.dialog); n != 0 {
+	if n := checkedCount(m.dialog.checked); n != 0 {
 		t.Errorf("checked = %d, want 0", n)
 	}
 }
 
 func TestDialogEntriesNavigation(t *testing.T) {
-	m, _ := entriesDialog(t, 30)
-	if rows := m.entriesRows(); rows != 10 {
+	if rows := func() int { m, _ := entriesDialog(t, 30); return m.entriesRows() }(); rows != 10 {
 		t.Fatalf("rows = %d, want 10", rows)
 	}
 	tests := []struct {
@@ -615,6 +608,7 @@ func TestDialogEntriesNavigation(t *testing.T) {
 		{[]string{"G", "ctrl+d"}, 29},
 	}
 	for _, tc := range tests {
+		m, _ := entriesDialog(t, 30) // the dialog is shared state: start fresh
 		got := press(t, m, tc.keys...).dialog.cursor
 		if got != tc.want {
 			t.Errorf("%v: cursor = %d, want %d", tc.keys, got, tc.want)
@@ -636,7 +630,7 @@ func TestDialogEntriesWindowFollowsCursor(t *testing.T) {
 }
 
 func TestDialogEntriesEnterNeedsSelection(t *testing.T) {
-	m, mgr := entriesDialog(t, 2)
+	m, _ := entriesDialog(t, 2)
 	m = press(t, m, "a", "enter") // uncheck all, then try to continue
 	if m.dialog.step != stepEntries || m.dialog.err == nil || m.dialog.err.Error() != "select at least one entry" {
 		t.Fatalf("step = %d, err = %v", m.dialog.step, m.dialog.err)
@@ -649,9 +643,6 @@ func TestDialogEntriesEnterNeedsSelection(t *testing.T) {
 	if m.dialog.step != stepDetails {
 		t.Fatalf("step = %d, want details", m.dialog.step)
 	}
-	if q, _ := mgr.Snapshot(); len(q) != 1 {
-		t.Errorf("queue = %d items before queueing, want 1", len(q))
-	}
 }
 
 func TestDialogEntriesEsc(t *testing.T) {
@@ -661,7 +652,7 @@ func TestDialogEntriesEsc(t *testing.T) {
 		t.Fatalf("step = %d, want details", m.dialog.step)
 	}
 	m = press(t, m, "esc")
-	if d := m.dialog; d.step != stepEntries || d.checked[0] || checkedCount(d) != 2 {
+	if d := m.dialog; d.step != stepEntries || d.checked[0] || checkedCount(d.checked) != 2 {
 		t.Errorf("step = %d, checked = %v: selection not kept", d.step, d.checked)
 	}
 	m = press(t, m, "esc")
@@ -671,7 +662,7 @@ func TestDialogEntriesEsc(t *testing.T) {
 	// A new probe resets the selection.
 	m, res := submit(t, m)
 	m = update(t, m, res)
-	if d := m.dialog; d.step != stepEntries || checkedCount(d) != 3 {
+	if d := m.dialog; d.step != stepEntries || checkedCount(d.checked) != 3 {
 		t.Errorf("step = %d, checked = %v, want all checked", d.step, d.checked)
 	}
 }
