@@ -23,7 +23,7 @@ func acquireLock(path string) (*Lock, error) {
 		}
 		return nil, err
 	}
-	return &Lock{f: f, path: path}, nil
+	return &Lock{f: f}, nil
 }
 
 func (l *Lock) release() error {

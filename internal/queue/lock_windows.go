@@ -4,64 +4,32 @@ package queue
 
 import (
 	"errors"
-	"fmt"
-	"io/fs"
 	"os"
-	"strconv"
-	"strings"
 	"syscall"
 )
 
-// stillActive is the exit code GetExitCodeProcess reports for a running process.
-const stillActive = 259
+// errSharingViolation is Windows' ERROR_SHARING_VIOLATION.
+const errSharingViolation = syscall.Errno(32)
 
-// acquireLock creates path exclusively and writes the process id into it. A
-// lock file left behind by a process that is no longer running is removed
-// and taken over.
+// acquireLock opens path without sharing, so no other process can open it
+// while the handle is held. Windows closes the handle when the process
+// exits, so a crash never leaves a stale lock.
 func acquireLock(path string) (*Lock, error) {
-	for attempt := 0; ; attempt++ {
-		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
-		if err == nil {
-			if _, err := fmt.Fprint(f, os.Getpid()); err != nil {
-				return nil, errors.Join(err, f.Close(), os.Remove(path))
-			}
-			return &Lock{f: f, path: path}, nil
-		}
-		if !errors.Is(err, fs.ErrExist) {
-			return nil, err
-		}
-		if attempt > 0 || holderAlive(path) {
-			return nil, ErrLocked
-		}
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, err
-		}
-	}
-}
-
-// holderAlive reports whether the process named in the lock file runs. An
-// unreadable or empty file counts as held: its owner may still be writing it.
-func holderAlive(path string) bool {
-	data, err := os.ReadFile(path)
+	name, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
-		return true
+		return nil, err
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	h, err := syscall.CreateFile(name, syscall.GENERIC_READ|syscall.GENERIC_WRITE, 0, nil,
+		syscall.OPEN_ALWAYS, syscall.FILE_ATTRIBUTE_NORMAL, 0)
+	if errors.Is(err, errSharingViolation) {
+		return nil, ErrLocked
+	}
 	if err != nil {
-		return true
+		return nil, err
 	}
-	h, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
-	if err != nil {
-		return errors.Is(err, syscall.ERROR_ACCESS_DENIED) // runs as another user
-	}
-	defer syscall.CloseHandle(h)
-	var code uint32
-	if err := syscall.GetExitCodeProcess(h, &code); err != nil {
-		return true
-	}
-	return code == stillActive
+	return &Lock{f: os.NewFile(uintptr(h), path)}, nil
 }
 
 func (l *Lock) release() error {
-	return errors.Join(l.f.Close(), os.Remove(l.path))
+	return l.f.Close()
 }
