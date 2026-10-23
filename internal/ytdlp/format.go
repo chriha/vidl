@@ -35,8 +35,9 @@ func (f Format) Valid() bool {
 
 // FormatArgs returns the yt-dlp arguments that select streams for the given
 // output format and maximum resolution. Preferred stream extensions match the
-// container so that merging doesn't need to re-encode; anything else falls
-// back to the best available streams.
+// container so that merging doesn't need to re-encode. MP4 and MKV prefer
+// H.264 and AAC because AV1 doesn't play in Apple players without hardware
+// decode; anything else falls back to the best available streams.
 func FormatArgs(f Format, resolution string) []string {
 	if f.IsAudio() {
 		return []string{"-f", "ba/b", "-x", "--audio-format", string(f)}
@@ -48,7 +49,9 @@ func FormatArgs(f Format, resolution string) []string {
 	var sel string
 	switch f {
 	case MP4:
-		sel = fmt.Sprintf("bv*%[1]s[ext=mp4]+ba[ext=m4a]/bv*%[1]s+ba/b%[1]s", h)
+		sel = fmt.Sprintf("bv*%[1]s[vcodec^=avc1]+ba[acodec^=mp4a]/bv*%[1]s[ext=mp4]+ba[ext=m4a]/bv*%[1]s+ba/b%[1]s", h)
+	case MKV:
+		sel = fmt.Sprintf("bv*%[1]s[vcodec^=avc1]+ba[acodec^=mp4a]/bv*%[1]s+ba/b%[1]s", h)
 	case WebM:
 		sel = fmt.Sprintf("bv*%[1]s[ext=webm]+ba[ext=webm]/bv*%[1]s+ba/b%[1]s", h)
 	default:

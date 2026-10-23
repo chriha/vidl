@@ -268,11 +268,14 @@ keep the settings they started with.
 
 For video formats vidl prefers streams that already match the container, so
 merging doesn't need re-encoding, and falls back to the best available
-streams otherwise. For example, mp4 at 1080p uses this yt-dlp format
-selector:
+streams otherwise. mp4 and mkv prefer H.264 video and AAC audio, which play
+in QuickTime and other Apple players (AV1 often doesn't without hardware
+decode). YouTube offers H.264 only up to 1080p, so a 1440p or 2160p request
+falls back to VP9 or AV1 streams. For example, mp4 at 1080p uses this yt-dlp
+format selector:
 
 ```
-bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]
+bv*[height<=1080][vcodec^=avc1]+ba[acodec^=mp4a]/bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]
 ```
 
 Audio formats download the best audio stream and convert it with ffmpeg.
