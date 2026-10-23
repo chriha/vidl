@@ -73,6 +73,10 @@ type Item struct {
 	ClipEnd   time.Duration `json:"clip_end,omitempty"`  // zero for "until the end"
 	Template  string        `json:"template,omitempty"`  // filename template
 	Subtitles *bool         `json:"subtitles,omitempty"` // embed subtitles
+
+	// SponsorBlock false skips the sponsorblock_remove setting for this
+	// download; nil follows it.
+	SponsorBlock *bool `json:"sponsorblock,omitempty"`
 }
 
 // DisplayTitle is the title, or the URL while the title is still unknown.
@@ -94,6 +98,9 @@ func (it *Item) clone() Item {
 	c.Log = slices.Clone(it.Log)
 	if it.Subtitles != nil {
 		c.Subtitles = new(*it.Subtitles)
+	}
+	if it.SponsorBlock != nil {
+		c.SponsorBlock = new(*it.SponsorBlock)
 	}
 	return c
 }

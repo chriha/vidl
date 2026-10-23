@@ -44,6 +44,9 @@ type NewItem struct {
 	Clip      ytdlp.Clip // single videos only
 	Template  string     // filename template
 	Subtitles *bool      // embed subtitles
+
+	// SponsorBlock false skips the sponsorblock_remove setting; nil follows it.
+	SponsorBlock *bool
 }
 
 // Manager owns the download queue and history. Queued items start
@@ -187,6 +190,9 @@ func newItem(r NewItem, cfg config.Config) *Item {
 	}
 	if r.Subtitles != nil {
 		it.Subtitles = new(*r.Subtitles)
+	}
+	if r.SponsorBlock != nil {
+		it.SponsorBlock = new(*r.SponsorBlock)
 	}
 	if !it.Format.Valid() {
 		it.Format = cfg.DefaultFormat
@@ -430,6 +436,10 @@ func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 	if it.Subtitles != nil {
 		subtitles = *it.Subtitles
 	}
+	sponsorBlock := c.SponsorBlockRemove
+	if it.SponsorBlock != nil && !*it.SponsorBlock {
+		sponsorBlock = ""
+	}
 	return ytdlp.Job{
 		URL:                it.URL,
 		Dir:                c.DownloadPath(),
@@ -444,7 +454,7 @@ func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 		CookiesFromBrowser: c.CookiesFromBrowser,
 		Clip:               it.Clip(),
 		ForceOverwrites:    it.redownload(),
-		SponsorBlockRemove: c.SponsorBlockRemove,
+		SponsorBlockRemove: sponsorBlock,
 	}
 }
 

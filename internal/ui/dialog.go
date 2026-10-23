@@ -42,6 +42,7 @@ const (
 	focusClipEnd   // single videos only
 	focusTemplate
 	focusSubtitles
+	focusSponsorBlock // only while the sponsorblock_remove setting is set
 )
 
 // playlistPreview is the number of playlist entries listed in the dialog.
@@ -87,6 +88,10 @@ type newDialog struct {
 	clipEnd     textinput.Model
 	template    textinput.Model // empty for the setting
 	subtitles   bool
+	// sponsorBlock removes the setting's SponsorBlock categories; the toggle
+	// is only offered when sponsorBlockShown.
+	sponsorBlock      bool
+	sponsorBlockShown bool
 
 	batch []string
 }
@@ -271,7 +276,7 @@ func (m Model) handleDetailsKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, d.moveFocus(-1)
 	case k == "h" || k == "left":
 		d.change(-1)
-	case k == "l" || k == "right" || (k == "space" && d.focus == focusSubtitles):
+	case k == "l" || k == "right" || (k == "space" && (d.focus == focusSubtitles || d.focus == focusSponsorBlock)):
 		d.change(1)
 	}
 	return m, nil
@@ -311,6 +316,8 @@ func (d *newDialog) showDetails(info *ytdlp.Info, cfg config.Config) {
 	d.clipEnd.SetValue("")
 	d.template.SetValue(cfg.FilenameTemplate)
 	d.subtitles = cfg.EmbedSubtitles
+	d.sponsorBlockShown = cfg.SponsorBlockRemove != ""
+	d.sponsorBlock = true
 	d.focusField()
 }
 
@@ -348,8 +355,8 @@ func (d *newDialog) audio() bool {
 	return ytdlp.Formats[d.format].IsAudio()
 }
 
-// fields are the details step's fields in tab order: no resolution for audio
-// and no clip for playlists.
+// fields are the details step's fields in tab order: no resolution for audio,
+// no clip for playlists and no SponsorBlock toggle without the setting.
 func (d *newDialog) fields() []int {
 	f := []int{focusFormat}
 	if !d.audio() {
@@ -358,7 +365,11 @@ func (d *newDialog) fields() []int {
 	if !d.info.IsPlaylist {
 		f = append(f, focusClipStart, focusClipEnd)
 	}
-	return append(f, focusTemplate, focusSubtitles)
+	f = append(f, focusTemplate, focusSubtitles)
+	if d.sponsorBlockShown {
+		f = append(f, focusSponsorBlock)
+	}
+	return f
 }
 
 // moveFocus focuses the next (delta 1) or previous (-1) field, wrapping around.
@@ -402,6 +413,8 @@ func (d *newDialog) change(delta int) {
 		d.res = (d.res + delta + len(d.resolutions)) % len(d.resolutions)
 	case focusSubtitles:
 		d.subtitles = !d.subtitles
+	case focusSponsorBlock:
+		d.sponsorBlock = !d.sponsorBlock
 	}
 }
 
@@ -420,6 +433,10 @@ func (m *Model) queueDetails() {
 	if d.subtitles != cfg.EmbedSubtitles {
 		subtitles = new(d.subtitles)
 	}
+	var sponsorBlock *bool
+	if d.sponsorBlockShown && !d.sponsorBlock {
+		sponsorBlock = new(false)
+	}
 	if !info.IsPlaylist {
 		clip, err := ytdlp.ParseClip(d.clipStart.Value(), d.clipEnd.Value())
 		if err != nil {
@@ -427,16 +444,17 @@ func (m *Model) queueDetails() {
 			return
 		}
 		m.queueAndClose([]queue.NewItem{{
-			URL:        cmpStr(info.URL, strings.TrimSpace(d.input.Value())),
-			Title:      info.Title,
-			Uploader:   info.Uploader,
-			Duration:   info.Duration,
-			Extractor:  info.Extractor,
-			Format:     format,
-			Resolution: res,
-			Clip:       clip,
-			Template:   template,
-			Subtitles:  subtitles,
+			URL:          cmpStr(info.URL, strings.TrimSpace(d.input.Value())),
+			Title:        info.Title,
+			Uploader:     info.Uploader,
+			Duration:     info.Duration,
+			Extractor:    info.Extractor,
+			Format:       format,
+			Resolution:   res,
+			Clip:         clip,
+			Template:     template,
+			Subtitles:    subtitles,
+			SponsorBlock: sponsorBlock,
 		}})
 		return
 	}
@@ -444,7 +462,7 @@ func (m *Model) queueDetails() {
 	for i, e := range info.Entries {
 		reqs[i] = queue.NewItem{
 			URL: e.URL, Title: e.Title, Duration: e.Duration, Format: format, Resolution: res,
-			Template: template, Subtitles: subtitles,
+			Template: template, Subtitles: subtitles, SponsorBlock: sponsorBlock,
 		}
 	}
 	m.queueAndClose(reqs)
@@ -559,8 +577,16 @@ func (d *newDialog) detailsLines(w int) []string {
 	}
 	lines = append(lines,
 		ansi.Truncate(fieldLabel("Template", d.focus == focusTemplate)+" "+d.template.View(), w, "…"),
-		ansi.Truncate(selector("Subtitles", []string{"off", "embed"}, subtitles, d.focus == focusSubtitles, false), w, "…"),
-		"")
+		ansi.Truncate(selector("Subtitles", []string{"off", "embed"}, subtitles, d.focus == focusSubtitles, false), w, "…"))
+	if d.sponsorBlockShown {
+		sponsorBlock := 0
+		if d.sponsorBlock {
+			sponsorBlock = 1
+		}
+		lines = append(lines,
+			ansi.Truncate(selector("Sponsors", []string{"keep", "remove"}, sponsorBlock, d.focus == focusSponsorBlock, false), w, "…"))
+	}
+	lines = append(lines, "")
 	if d.err != nil {
 		lines = append(lines, errorStyle.Width(w).MaxHeight(3).Render(d.err.Error()), "")
 	}

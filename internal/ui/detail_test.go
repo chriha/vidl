@@ -135,6 +135,8 @@ func TestDetailFieldsOverrides(t *testing.T) {
 		{"template", queue.Item{URL: "u", Template: "%(id)s.%(ext)s"}, []string{"Template  %(id)s.%(ext)s"}, []string{"Clip", "Subtitles"}},
 		{"subtitles off", queue.Item{URL: "u", Subtitles: &off}, []string{"Subtitles off"}, nil},
 		{"subtitles on", queue.Item{URL: "u", Subtitles: &on}, []string{"Subtitles embedded"}, nil},
+		{"sponsorblock off", queue.Item{URL: "u", SponsorBlock: &off}, []string{"Sponsors  kept"}, nil},
+		{"sponsorblock follows the setting", queue.Item{URL: "u"}, nil, []string{"Sponsors"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var m Model

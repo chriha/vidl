@@ -26,6 +26,7 @@ import (
 type fakeRunner struct {
 	mu   sync.Mutex
 	done map[string]chan struct{}
+	jobs map[string]ytdlp.Job // url -> most recent job
 }
 
 const fakeLogLines = 30
@@ -44,7 +45,27 @@ func (f *fakeRunner) ch(url string) chan struct{} {
 
 func (f *fakeRunner) finish(url string) { close(f.ch(url)) }
 
+// job waits until url has been run and returns its most recent job.
+func (f *fakeRunner) job(t *testing.T, url string) ytdlp.Job {
+	t.Helper()
+	var job ytdlp.Job
+	waitFor(t, url+" to run", func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		var ok bool
+		job, ok = f.jobs[url]
+		return ok
+	})
+	return job
+}
+
 func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.Event)) error {
+	f.mu.Lock()
+	if f.jobs == nil {
+		f.jobs = map[string]ytdlp.Job{}
+	}
+	f.jobs[job.URL] = job
+	f.mu.Unlock()
 	for i := range fakeLogLines {
 		onEvent(ytdlp.Event{Kind: ytdlp.EventLog, Line: fmt.Sprintf("%s line %d", job.URL, i+1)})
 	}
