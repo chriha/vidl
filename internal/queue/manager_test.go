@@ -440,6 +440,31 @@ func TestPersistenceAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestEstimatedSizePersists(t *testing.T) {
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	want := State{Queue: []Item{{ID: "a", URL: "a", EstimatedSize: 432013312}}}
+	if err := store.Save(want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Queue) != 1 || got.Queue[0].EstimatedSize != 432013312 {
+		t.Errorf("queue = %+v", got.Queue)
+	}
+}
+
+func TestLoadWithoutEstimatedSize(t *testing.T) {
+	got, err := FileStore{Path: "testdata/queue_legacy.json"}.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Queue) != 1 || got.Queue[0].URL != "a" || got.Queue[0].EstimatedSize != 0 {
+		t.Errorf("queue = %+v", got.Queue)
+	}
+}
+
 // finishedItem downloads url to a real 1234-byte file and returns its id and path.
 func finishedItem(t *testing.T, m *Manager, r *fakeRunner, url string) (id, path string) {
 	t.Helper()

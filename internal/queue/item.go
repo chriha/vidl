@@ -64,6 +64,10 @@ type Item struct {
 	StartedAt  time.Time      `json:"started_at,omitzero"`
 	FinishedAt time.Time      `json:"finished_at,omitzero"`
 
+	// EstimatedSize is yt-dlp's size estimate in bytes before the download
+	// starts; 0 when unknown. Progress.Total replaces it once known.
+	EstimatedSize int64 `json:"estimated_size,omitempty"`
+
 	// Per-download overrides; zero values follow the settings.
 	ClipStart time.Duration `json:"clip_start,omitempty"`
 	ClipEnd   time.Duration `json:"clip_end,omitempty"`  // zero for "until the end"

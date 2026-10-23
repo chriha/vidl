@@ -34,12 +34,9 @@ var downloadColumns = []column{
 func downloadCells(i int, it queue.Item) []cell {
 	p := it.Progress
 	fg := statusColors[it.Status]
-	speed, eta, size := "", "", "–"
+	speed, eta := "", ""
 	if it.Status == queue.Downloading {
 		speed, eta = humanSpeed(p.Speed), humanDuration(p.ETA)
-	}
-	if p.Total > 0 {
-		size = humanBytes(p.Total)
 	}
 	cells := []cell{
 		textCell(strconv.Itoa(i+1), dimStyle),
@@ -48,13 +45,25 @@ func downloadCells(i int, it queue.Item) []cell {
 		barCell(p.Percent, fg),
 		textCell(speed, lipgloss.NewStyle()),
 		textCell(eta, lipgloss.NewStyle()),
-		textCell(size, lipgloss.NewStyle()),
+		textCell(sizeLabel(it)),
 	}
 	if it.Status == queue.Downloading && p.Stage != "" {
 		// Post-processing: the stage replaces speed and ETA.
 		cells[4], cells[5] = textCell(p.Stage, dimStyle), nil
 	}
 	return cells
+}
+
+// sizeLabel is the Size cell of a download: the exact total once yt-dlp
+// reports it, else a dimmed "~" estimate, else "–".
+func sizeLabel(it queue.Item) (string, lipgloss.Style) {
+	switch {
+	case it.Progress.Total > 0:
+		return humanBytes(it.Progress.Total), lipgloss.NewStyle()
+	case it.EstimatedSize > 0:
+		return "~" + humanBytes(it.EstimatedSize), dimStyle
+	}
+	return "–", lipgloss.NewStyle()
 }
 
 var finishedColumns = []column{
