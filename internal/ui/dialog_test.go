@@ -399,10 +399,8 @@ func TestDialogClipValidation(t *testing.T) {
 			if m.dialog == nil || m.dialog.step != stepDetails || m.dialog.err == nil || len(q) != 0 {
 				t.Fatalf("invalid clip queued or no error: queue = %d items", len(q))
 			}
-			m = press(t, m, "tab", "tab")
-			m = typeText(t, m, "1")
-			if m.dialog.err != nil {
-				t.Errorf("error kept after editing a clip field: %v", m.dialog.err)
+			if m = press(t, m, "tab"); m.dialog.err != nil {
+				t.Errorf("error kept after moving to another field: %v", m.dialog.err)
 			}
 		})
 	}

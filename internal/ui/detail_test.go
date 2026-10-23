@@ -129,6 +129,7 @@ func TestDetailFieldsOverrides(t *testing.T) {
 		{"none", queue.Item{URL: "u"}, nil, []string{"Clip", "Template", "Subtitles"}},
 		{"clip", queue.Item{URL: "u", ClipStart: 90 * time.Second, ClipEnd: 2*time.Hour + 5*time.Second}, []string{"Clip      1:30 – 2:00:05"}, []string{"Template", "Subtitles"}},
 		{"open start", queue.Item{URL: "u", ClipEnd: 45 * time.Second}, []string{"Clip      0:00 – 0:45"}, nil},
+		{"fractions", queue.Item{URL: "u", ClipStart: 400 * time.Millisecond, ClipEnd: 62500 * time.Millisecond}, []string{"Clip      0:00.4 – 1:02.5"}, nil},
 		{"open end", queue.Item{URL: "u", ClipStart: 30 * time.Second}, []string{"Clip      0:30 – end"}, nil},
 		{"template", queue.Item{URL: "u", Template: "%(id)s.%(ext)s"}, []string{"Template  %(id)s.%(ext)s"}, []string{"Clip", "Subtitles"}},
 		{"subtitles off", queue.Item{URL: "u", Subtitles: &off}, []string{"Subtitles off"}, nil},

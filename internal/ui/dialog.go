@@ -245,9 +245,13 @@ func (m Model) handleDialogKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 func (m Model) handleDetailsKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	d := m.dialog
 	in := d.textField()
-	switch k := msg.String(); {
+	k := msg.String()
+	if k != "enter" {
+		d.err = nil // shown until the next edit or move
+	}
+	switch {
 	case k == "esc":
-		d.focus, d.err = focusFormat, nil
+		d.focus = focusFormat
 		d.focusField()
 		d.step = stepInput
 		return m, d.input.Focus()
@@ -260,7 +264,6 @@ func (m Model) handleDetailsKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case in != nil:
 		var cmd tea.Cmd
 		*in, cmd = in.Update(msg)
-		d.err = nil
 		return m, cmd
 	case k == "j":
 		return m, d.moveFocus(1)
@@ -410,7 +413,7 @@ func (m *Model) queueDetails() {
 	info, format, res := d.info, ytdlp.Formats[d.format], d.resolutions[d.res]
 	cfg := m.mgr.Config()
 	template := strings.TrimSpace(d.template.Value())
-	if template == cfg.FilenameTemplate {
+	if template == strings.TrimSpace(cfg.FilenameTemplate) {
 		template = "" // follow the setting
 	}
 	var subtitles *bool
@@ -565,7 +568,7 @@ func (d *newDialog) detailsLines(w int) []string {
 	if info.IsPlaylist {
 		action = fmt.Sprintf("enter queue %d downloads", len(info.Entries))
 	}
-	lines = append(lines, dimStyle.Render(ansi.Truncate(action+" · tab/↑/↓ field · h/l change · esc back", w, "…")))
+	lines = append(lines, dimStyle.Render(ansi.Truncate(action+" · tab/↑/↓ field · h/l/space change · esc back", w, "…")))
 	return lines
 }
 
