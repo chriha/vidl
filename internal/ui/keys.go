@@ -12,6 +12,8 @@ type keyMap struct {
 	Detail, Close            key.Binding
 	MoveUp, MoveDown         key.Binding
 	Search, ClearFilter      key.Binding
+	Mark, MarkAll            key.Binding
+	ClearMarks               key.Binding
 	StatusFilter             key.Binding
 	Open, Reveal             key.Binding
 	ClearHistory             key.Binding
@@ -45,6 +47,9 @@ func newKeyMap() keyMap {
 		Close:        key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close details")),
 		Search:       key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		ClearFilter:  key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear filter")),
+		Mark:         key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "mark")),
+		MarkAll:      key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "mark all")),
+		ClearMarks:   key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear marks")),
 		StatusFilter: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter status")),
 		Open:         key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open file")),
 		Reveal:       key.NewBinding(key.WithKeys("O"), key.WithHelp("O", "show in folder")),
@@ -64,6 +69,7 @@ type tabKeys struct {
 	tab       tab
 	detail    bool // detail panel open
 	filtering bool // a search filter is active
+	marked    bool // rows are marked on this tab
 }
 
 // detailKey is enter to open the panel, or esc to close it once it's open.
@@ -76,27 +82,31 @@ func (k tabKeys) detailKey() key.Binding {
 
 // searchKey is / to search, or esc to clear the filter when esc does that.
 func (k tabKeys) searchKey() key.Binding {
-	if k.filtering && !k.detail {
+	if k.filtering && !k.detail && !k.marked {
 		return k.ClearFilter
 	}
 	return k.Search
 }
 
 // escKeys is esc's current meaning: closing the panel, then clearing the
-// filter.
+// marks, then the filter.
 func (k tabKeys) escKeys() []key.Binding {
-	if k.filtering {
-		return []key.Binding{k.Close, k.ClearFilter}
+	keys := []key.Binding{k.Close}
+	if k.marked {
+		keys = append(keys, k.ClearMarks)
 	}
-	return []key.Binding{k.Close}
+	if k.filtering {
+		keys = append(keys, k.ClearFilter)
+	}
+	return keys
 }
 
 func (k tabKeys) ShortHelp() []key.Binding {
 	switch k.tab {
 	case tabDownloads:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
 	case tabFinished:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Open, k.Reveal, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Open, k.Reveal, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
 	case tabSettings:
 		return []key.Binding{k.Up, k.Down, k.Edit, k.Decrease, k.Increase, k.NextTab, k.Help, k.Quit}
 	}
@@ -109,9 +119,9 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 	general := []key.Binding{k.New, k.Help, k.Quit}
 	switch k.tab {
 	case tabDownloads:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search, k.StatusFilter}, k.escKeys()...), {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Open, k.Reveal, k.Remove, k.ClearHistory}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.Remove, k.ClearHistory}, tabs, general}
 	case tabSettings:
 		return [][]key.Binding{{k.Up, k.Down, k.Top, k.Bottom}, {k.Edit, k.Toggle, k.Decrease, k.Increase}, {k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3}, general}
 	}

@@ -171,6 +171,14 @@ download must match both), and the line above the table shows it, e.g.
 `/ foo  [failed]  3 of 12`. `esc` clears the search and the status filter
 together.
 
+On the Downloads and Finished tabs, `space` marks or unmarks the selected
+download and moves to the next one; `V` marks every visible download (the
+filters apply) or, when they're all marked already, unmarks them. Marked rows
+show a `▌` at their left edge and the status line counts them, e.g.
+`3 marked`. Marks are kept per tab, while a filter hides them, and drop out
+when a download leaves the tab. `esc` clears the marks after closing the
+detail panel and before clearing the filters.
+
 On the Finished tab, `o` opens a file with its default application and `O`
 shows it in Finder (macOS), selects it in Explorer (Windows) or opens its
 folder (Linux). Removing downloads
@@ -205,7 +213,9 @@ automatically the next time you start vidl.
 | `u` / `d`             | Move queued download up / down                      |
 | `r`                   | Remove (asks for confirmation)                      |
 | `enter`               | Toggle the detail panel                             |
-| `esc`                 | Close the detail panel, then clear the filters      |
+| `space`               | Mark or unmark the download and move down           |
+| `V`                   | Mark all visible downloads, or unmark them all      |
+| `esc`                 | Close the detail panel, then clear marks, filters   |
 | `/`                   | Search the current tab by title or URL              |
 | `f`                   | Cycle the status filter (Downloads tab)             |
 | `o`                   | Open the file (Finished tab)                        |
