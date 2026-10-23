@@ -33,6 +33,7 @@ type Config struct {
 	EmbedMetadata      bool         `toml:"embed_metadata"`
 	RateLimit          string       `toml:"rate_limit"`
 	CookiesFromBrowser string       `toml:"cookies_from_browser"`
+	Notify             bool         `toml:"notify"` // desktop notification when a download finishes or fails
 }
 
 func Default() Config {
@@ -44,6 +45,7 @@ func Default() Config {
 		FilenameTemplate:  "%(title)s [%(id)s].%(ext)s",
 		SubtitleLangs:     "en.*",
 		EmbedMetadata:     true,
+		Notify:            true,
 	}
 }
 

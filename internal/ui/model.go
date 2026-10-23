@@ -17,6 +17,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/vidl/internal/notify"
 	"github.com/chriha/vidl/internal/queue"
 )
 
@@ -92,7 +93,11 @@ type Model struct {
 	cfgPath  string // where settings are saved
 
 	versionFn func(context.Context) (string, error) // yt-dlp version for the startup check, nil to skip
+	notifier  notify.Notifier                       // desktop notifications, nil to disable
 	now       func() time.Time
+
+	ended             []queue.Item // finished or failed downloads awaiting a notification
+	notifyUnavailable bool         // the notifier binary is missing; stop trying
 
 	probeSeq  int                    // id of the latest probe request
 	clipboard func() (string, error) // reads the system clipboard
@@ -117,6 +122,13 @@ func (m Model) WithVersionCheck(fn func(context.Context) (string, error)) Model 
 	return m
 }
 
+// WithNotifier makes the model send desktop notifications through n when
+// downloads finish or fail.
+func (m Model) WithNotifier(n notify.Notifier) Model {
+	m.notifier = n
+	return m
+}
+
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.waitForChange(), m.checkVersion())
 }
@@ -131,7 +143,9 @@ func (m Model) waitForChange() tea.Cmd {
 
 // refresh takes a new snapshot and keeps the cursors on their items.
 func (m *Model) refresh() {
+	prev := m.statuses()
 	m.queue, m.history = m.mgr.Snapshot()
+	m.collectEnded(prev)
 	m.pruneMarks()
 	m.follow()
 }
@@ -163,6 +177,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			d = longToastDuration
 		}
 		cmd = tea.Batch(cmd, expireToast(next.toast.seq, d))
+	}
+	if len(m.ended) == 0 && len(next.ended) > 0 {
+		cmd = tea.Batch(cmd, tea.Tick(notifyWindow, func(time.Time) tea.Msg { return notifyFlushMsg{} }))
 	}
 	return next, cmd
 }
@@ -196,6 +213,11 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case versionMsg:
 		m.handleVersion(msg)
+		return m, nil
+	case notifyFlushMsg:
+		return m, m.flushNotifications()
+	case notifiedMsg:
+		m.handleNotified(msg.err)
 		return m, nil
 	}
 	if m.dialog != nil {
@@ -263,7 +285,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, k.Start):
 		m.act(m.mgr.Start)
 	case key.Matches(msg, k.Pause):
-		m.act(m.mgr.Pause)
+		m.act(m.pauseOrRequeue)
 	case key.Matches(msg, k.Cancel):
 		m.act(m.mgr.Cancel)
 	case key.Matches(msg, k.Retry):
@@ -414,6 +436,14 @@ func (m Model) retry(id string) error {
 		return errNotRetryable
 	}
 	return m.mgr.Start(id)
+}
+
+// pauseOrRequeue puts a paused download back in the queue and pauses any other.
+func (m Model) pauseOrRequeue(id string) error {
+	if it, ok := m.mgr.Get(id); ok && it.Status == queue.Paused {
+		return m.mgr.Requeue(id)
+	}
+	return m.mgr.Pause(id)
 }
 
 func (m Model) tabItems(t tab) []queue.Item {

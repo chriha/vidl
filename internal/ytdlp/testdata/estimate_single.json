@@ -1,0 +1,12 @@
+{
+ "_type": "video",
+ "id": "abc123",
+ "title": "Single stream",
+ "channel": "Some Channel",
+ "webpage_url": "https://vimeo.com/123",
+ "extractor_key": "Vimeo",
+ "duration": 61.5,
+ "format_id": "http-720p",
+ "filesize": 10485760,
+ "filesize_approx": 9000000
+}

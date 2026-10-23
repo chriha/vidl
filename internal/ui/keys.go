@@ -36,7 +36,7 @@ func newKeyMap() keyMap {
 		Tab2:         key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "finished")),
 		Tab3:         key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "settings")),
 		Start:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "start")),
-		Pause:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pause")),
+		Pause:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pause/requeue")),
 		Cancel:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "cancel")),
 		Retry:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "retry")),
 		Remove:       key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "remove")),
