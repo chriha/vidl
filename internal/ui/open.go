@@ -23,32 +23,67 @@ type opener func(path string, reveal bool) error
 // openedMsg is the outcome of opening a file.
 type openedMsg struct{ err error }
 
-// systemOpen uses open on macOS and xdg-open elsewhere, which can't select a
-// file, so it opens the containing folder to reveal one.
-func systemOpen(path string, reveal bool) error {
-	if !filepath.IsAbs(path) {
-		return fmt.Errorf("not an absolute path: %s", path)
-	}
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
+// openSpec is the command that opens or reveals a file.
+type openSpec struct {
+	name string
+	args []string
+	// cmdLine, when set, is the verbatim Windows command line used instead
+	// of quoting args (see setCmdLine).
+	cmdLine string
+	// ignoreExit treats a non-zero exit status as success.
+	ignoreExit bool
+}
+
+// openCommand chooses the command for goos: open on macOS, rundll32 and
+// explorer on Windows, xdg-open elsewhere. xdg-open can't select a file, so
+// it opens the containing folder to reveal one.
+func openCommand(goos, path string, reveal bool) openSpec {
+	switch goos {
 	case "darwin":
 		if reveal {
-			cmd = exec.Command("open", "-R", path)
-		} else {
-			cmd = exec.Command("open", path)
+			return openSpec{name: "open", args: []string{"-R", path}}
 		}
+		return openSpec{name: "open", args: []string{path}}
 	case "windows":
-		return errors.New("opening files is not supported on Windows")
+		if reveal {
+			// Explorer misparses /select, when Go quotes the argument and
+			// exits with status 1 even on success.
+			return openSpec{
+				name:       "explorer.exe",
+				cmdLine:    `explorer.exe /select,"` + path + `"`,
+				ignoreExit: true,
+			}
+		}
+		// Unlike "cmd /c start", rundll32 doesn't re-parse the path.
+		return openSpec{name: "rundll32.exe", args: []string{"url.dll,FileProtocolHandler", path}}
 	default:
 		if reveal {
 			path = filepath.Dir(path)
 		}
-		cmd = exec.Command("xdg-open", path)
+		return openSpec{name: "xdg-open", args: []string{path}}
+	}
+}
+
+// systemOpen opens path with its default application, or with reveal shows it
+// in the file manager.
+func systemOpen(path string, reveal bool) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("not an absolute path: %s", path)
+	}
+	spec := openCommand(runtime.GOOS, path, reveal)
+	cmd := exec.Command(spec.name, spec.args...)
+	if spec.cmdLine != "" {
+		setCmdLine(cmd, spec.cmdLine)
 	}
 	// No output capture: an application started by xdg-open could inherit the
 	// pipe and keep Run waiting until it exits.
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w", filepath.Base(cmd.Path), err)
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if err != nil && spec.ignoreExit && errors.As(err, &exit) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", spec.name, err)
 	}
 	return nil
 }

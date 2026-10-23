@@ -50,8 +50,7 @@ downloads resume where they stopped.
 - [ffmpeg](https://ffmpeg.org) on your `PATH`, used to merge video and audio
   streams, extract audio and embed thumbnails/subtitles.
 - [Go](https://go.dev/dl/) 1.27 or newer to build from source.
-- macOS or Linux. Windows is supported but less tested: pausing and
-  cancelling work, opening files from the Finished tab doesn't yet.
+- macOS or Linux. Windows is supported but less tested.
 
 vidl checks for yt-dlp and ffmpeg at startup and exits with an install hint
 if either is missing.
@@ -164,7 +163,8 @@ and `X` on a filtered Finished tab removes only the matching downloads from
 the history.
 
 On the Finished tab, `o` opens a file with its default application and `O`
-shows it in Finder (macOS) or opens its folder (Linux). Removing downloads
+shows it in Finder (macOS), selects it in Explorer (Windows) or opens its
+folder (Linux). Removing downloads
 from the history never deletes their files.
 
 The line above the help shows the total download speed and how many downloads
@@ -399,7 +399,7 @@ directly to see whether the problem is the site or vidl.
       progress, small-terminal handling
 - [x] Release: MIT license, CI, release binaries, `go install`, pause and
       cancel on Windows
-- [ ] Open files from the Finished tab on Windows
+- [x] Open files from the Finished tab on Windows
 
 ## License
 
