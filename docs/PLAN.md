@@ -1,8 +1,8 @@
 # vidl implementation plan
 
-Handoff document for continuing development. Milestones 1–5 are done;
+Handoff document for continuing development. Milestones 1–6 are done;
 this file describes what was decided, what exists, what was learned the hard
-way, and what remains (milestones 6–8) in enough detail to proceed without
+way, and what remains (milestones 7–8) in enough detail to proceed without
 the original conversation.
 
 Read `README.md` first for the user-facing picture, then this file.
@@ -97,8 +97,11 @@ internal/queue/        no UI knowledge
   store.go             State, Store, FileStore (atomic JSON), MemStore
 internal/config/       Config, Default, Load, Save, Normalize, Dir,
                        DownloadPath, ExpandHome, Browsers
-internal/ui/           Bubble Tea root model (currently a scaffold)
+internal/ui/           Bubble Tea root model
   model.go, keys.go, format.go (humanBytes/humanSpeed/humanDuration)
+  table.go, views.go   Downloads/Finished tables
+  detail.go            detail panel
+  dialog.go            new-download dialog, Prober interface
 ```
 
 ### `ytdlp` package
@@ -170,6 +173,15 @@ the Downloads and Finished tables; `detail.go` renders the detail panel
 `Update` wraps `update` so the viewport is synced after every message. Errors
 from actions show above the help footer.
 
+`dialog.go` is the new-download dialog (`n`), a `*newDialog` overlaid on the
+body with the same compositor as the remove confirmation. While it's open
+`update` routes every message except `WindowSizeMsg`/`changedMsg` to
+`handleDialogMsg`, so global keys are off. Steps: input → probing → details,
+plus a batch step for multi-URL pastes. `ui.New(mgr, prober)` takes a
+`Prober` (`ytdlp.Runner` in `main`, a fake in tests); `Model.clipboard` reads
+the clipboard via `atotto/clipboard` (already a dependency of
+`bubbles/textinput`) and is replaced in tests.
+
 ## Lessons learned (don't rediscover these)
 
 - **yt-dlp writes postprocess progress to stderr** and download progress to
@@ -200,6 +212,18 @@ from actions show above the help footer.
   viewport is synced in `Update` (`syncLog`), never in `View`, and always
   jumps to the bottom. Terminals narrower than the tab bar (~31 columns)
   still overflow; that's milestone 8.
+- **New-download dialog**: probe results carry a request id (`probeSeq`) and
+  are ignored unless they match the dialog's current probe, so a cancelled
+  probe (`esc`) that returns late can't overwrite a newer one. Bubble Tea v2's
+  OSC52 clipboard read needs terminal support, so the dialog shells out via
+  `atotto/clipboard` (`pbpaste`, `wl-paste`, `xclip`) and ignores errors.
+  "Me at the zoo" tops out at 240p, below every standard resolution, so its
+  resolution selector only offers `best`; that's intended. In UI tests, don't
+  execute the textinput's `Focus` cmd (cursor blink sleeps ~0.5 s); use
+  `findMsg[T]` to pull a specific message out of a batch.
+- In zsh, `T="tmux -L vidl-test"; $T ...` fails (no word splitting); use a
+  function `T() { tmux -L vidl-test "$@"; }`. Multi-URL paste can be tested
+  with `tmux load-buffer -` + `paste-buffer -p` (bracketed paste).
 - **Manual checks in tmux**: use a private server (`tmux -L vidl-test`) and
   never `kill-session` on the default one; the developer may be running the
   agent inside a tmux session with the same name.
@@ -220,7 +244,7 @@ from actions show above the help footer.
 
 ## Remaining milestones
 
-Suggested order: 4 → 5 → 6 → 7 → 8 (4 and 5 are done). Each should be usable on its own.
+Suggested order: 4 → 5 → 6 → 7 → 8 (4, 5 and 6 are done). Each should be usable on its own.
 
 ### Milestone 4: Downloads and Finished tables
 
@@ -300,7 +324,7 @@ disabled except `ctrl+c`).
    the probed metadata, closes the dialog and moves the cursor to the new
    item.
 
-Inject the prober into the UI (`ui.New(mgr, prober, cfgPath)` with a small
+Inject the prober into the UI (`ui.New(mgr, prober)`; milestone 7 adds `cfgPath`) with a small
 `interface{ Probe(ctx, url, cookies string) (*ytdlp.Info, error) }`) so the
 dialog can be tested with a fake.
 

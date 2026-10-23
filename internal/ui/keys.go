@@ -8,7 +8,7 @@ type keyMap struct {
 	NextTab, PrevTab         key.Binding
 	Tab1, Tab2, Tab3         key.Binding
 	Start, Pause, Cancel     key.Binding
-	Retry, Remove            key.Binding
+	Retry, Remove, New       key.Binding
 	Detail, Close            key.Binding
 	MoveUp, MoveDown         key.Binding
 	Help, Quit               key.Binding
@@ -32,6 +32,7 @@ func newKeyMap() keyMap {
 		Cancel:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "cancel")),
 		Retry:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "retry")),
 		Remove:       key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "remove")),
+		New:          key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
 		MoveUp:       key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "move up")),
 		MoveDown:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "move down")),
 		Detail:       key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details")),
@@ -59,17 +60,17 @@ func (k tabKeys) detailKey() key.Binding {
 func (k tabKeys) ShortHelp() []key.Binding {
 	switch k.tab {
 	case tabDownloads:
-		return []key.Binding{k.Up, k.Down, k.detailKey(), k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.NextTab, k.Help, k.Quit}
 	case tabFinished:
-		return []key.Binding{k.Up, k.Down, k.detailKey(), k.Remove, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Remove, k.NextTab, k.Help, k.Quit}
 	}
-	return []key.Binding{k.NextTab, k.Help, k.Quit}
+	return []key.Binding{k.New, k.NextTab, k.Help, k.Quit}
 }
 
 func (k tabKeys) FullHelp() [][]key.Binding {
 	nav := []key.Binding{k.Up, k.Down, k.Top, k.Bottom, k.HalfPageDown, k.HalfPageUp}
 	tabs := []key.Binding{k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3}
-	general := []key.Binding{k.Help, k.Quit}
+	general := []key.Binding{k.New, k.Help, k.Quit}
 	switch k.tab {
 	case tabDownloads:
 		return [][]key.Binding{nav, {k.Detail, k.Close}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}

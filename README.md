@@ -11,12 +11,16 @@ downloads resume where they stopped.
 
 > **Status:** early development. The download engine, queue, persistence and
 > configuration are complete and tested, and so are the Downloads and Finished
-> tables and the detail panel; the new-download dialog and settings editor are
+> tables, the detail panel and the new-download dialog; the settings editor is
 > in progress.
 > See [Roadmap](#roadmap) for what works today.
 
 ## Features
 
+- **New-download dialog**: paste a URL (prefilled from the clipboard), see
+  its title, uploader, duration and approximate size, pick a format and
+  resolution, and queue it. Playlists queue every entry; pasting several URLs
+  at once queues them all with the default settings.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
 - **Per-download progress**: percentage, speed and ETA, combined across the
@@ -114,6 +118,16 @@ The UI has three tabs:
 - **Finished**: completed downloads, most recent first.
 - **Settings**: download preferences.
 
+Press `n` to add a download. If the clipboard holds a URL, it's already
+filled in; otherwise paste or type one and press `enter` to fetch its details.
+Choose the file type and resolution with `tab`/`j`/`k` (field) and `h`/`l`
+(value), then press `enter` to queue it, or `esc` to go back and edit the URL.
+Resolutions above the video's best are hidden, and audio formats ignore the
+resolution. For a playlist, `enter` queues every entry with the chosen
+settings. Pasting several URLs at once offers to queue them all with the
+default format and resolution, without fetching details first. While the
+dialog is open, other keys are disabled; `ctrl+c` still quits.
+
 Quitting stops running downloads and keeps their partial files; they continue
 automatically the next time you start vidl.
 
@@ -133,7 +147,7 @@ automatically the next time you start vidl.
 | `c`                   | Cancel (deletes partial files)                 | ✅      |
 | `enter`               | Toggle the detail panel                        | ✅      |
 | `esc`                 | Close the detail panel                         | ✅      |
-| `n`                   | New download                                   | planned |
+| `n`                   | New download                                   | ✅      |
 | `r`                   | Remove (asks for confirmation)                 | ✅      |
 | `u` / `d`             | Move queued download up / down                 | ✅      |
 | `/`                   | Search / filter                                | planned |
@@ -302,7 +316,7 @@ directly to see whether the problem is the site or vidl.
 - [x] UI scaffold: tabs, navigation, help
 - [x] Downloads and Finished tables with progress bars, speed and ETA
 - [x] Detail panel (`enter`)
-- [ ] New-download dialog with format and resolution selection, playlist
+- [x] New-download dialog with format and resolution selection, playlist
       expansion and multi-URL paste
 - [ ] Settings tab
 - [ ] Open file, clear history, global speed footer, search

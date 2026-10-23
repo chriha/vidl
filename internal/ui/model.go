@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 
 	"vidl/internal/queue"
@@ -49,6 +50,7 @@ type confirmRemove struct {
 // Model is the root Bubble Tea model.
 type Model struct {
 	mgr     *queue.Manager
+	prober  Prober
 	keys    keyMap
 	help    help.Model
 	tab     tab
@@ -62,11 +64,20 @@ type Model struct {
 	confirm *confirmRemove
 	detail  bool           // detail panel open
 	log     viewport.Model // yt-dlp output in the detail panel
+	dialog  *newDialog     // new-download dialog, nil when closed
 	err     error
+
+	probeSeq  int                    // id of the latest probe request
+	clipboard func() (string, error) // reads the system clipboard
 }
 
-func New(mgr *queue.Manager) Model {
-	m := Model{mgr: mgr, keys: newKeyMap(), help: help.New(), log: viewport.New()}
+// New returns the root model for mgr; prober fetches metadata in the
+// new-download dialog.
+func New(mgr *queue.Manager, prober Prober) Model {
+	m := Model{
+		mgr: mgr, prober: prober, keys: newKeyMap(), help: help.New(), log: viewport.New(),
+		clipboard: clipboard.ReadAll,
+	}
 	m.log.SoftWrap = true
 	m.refresh()
 	return m
@@ -114,10 +125,19 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
+		if m.dialog != nil {
+			m.dialog.input.SetWidth(m.dialogWidth() - 8)
+		}
 		m.scroll()
+		return m, nil
 	case changedMsg:
 		m.refresh()
 		return m, m.waitForChange()
+	}
+	if m.dialog != nil {
+		return m.handleDialogMsg(msg)
+	}
+	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if m.confirm != nil {
 			return m.handleConfirmKey(msg)
@@ -175,6 +195,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.refresh()
 	case key.Matches(msg, k.Remove):
 		m.askRemove()
+	case key.Matches(msg, k.New):
+		return m, m.openDialog()
 	case key.Matches(msg, k.Detail):
 		if _, ok := m.selected(); ok || m.detail {
 			m.detail = !m.detail
@@ -345,6 +367,9 @@ func (m Model) render() string {
 	body = lipgloss.NewStyle().Height(bodyHeight).MaxHeight(bodyHeight).Render(body)
 	if m.confirm != nil {
 		body = m.overlay(body, m.confirmView(), bodyHeight)
+	}
+	if m.dialog != nil {
+		body = m.overlay(body, m.dialogView(), bodyHeight)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 }

@@ -74,7 +74,8 @@ func run(urls []string) error {
 		}
 	}
 
-	mgr, err := queue.New(cfg, ytdlp.Runner{}, queue.FileStore{Path: filepath.Join(dir, "queue.json")})
+	runner := ytdlp.Runner{}
+	mgr, err := queue.New(cfg, runner, queue.FileStore{Path: filepath.Join(dir, "queue.json")})
 	if err != nil {
 		return fmt.Errorf("loading queue: %w", err)
 	}
@@ -84,7 +85,7 @@ func run(urls []string) error {
 	}
 	mgr.Add(reqs...)
 
-	_, runErr := tea.NewProgram(ui.New(mgr)).Run()
+	_, runErr := tea.NewProgram(ui.New(mgr, runner)).Run()
 	closeErr := mgr.Close()
 	return errors.Join(runErr, closeErr)
 }
