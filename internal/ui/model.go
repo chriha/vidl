@@ -85,6 +85,8 @@ type Model struct {
 	search *textinput.Model // filter input, nil when closed
 	open   opener
 
+	marks [tabCount]map[string]bool // marked item ids per tab
+
 	settings settingsForm
 	cfgPath  string // where settings are saved
 
@@ -129,6 +131,7 @@ func (m Model) waitForChange() tea.Cmd {
 // refresh takes a new snapshot and keeps the cursors on their items.
 func (m *Model) refresh() {
 	m.queue, m.history = m.mgr.Snapshot()
+	m.pruneMarks()
 	m.follow()
 }
 
@@ -278,6 +281,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, m.openSelected(false)
 	case key.Matches(msg, k.Reveal):
 		return m, m.openSelected(true)
+	case key.Matches(msg, k.Mark):
+		m.toggleMark()
+	case key.Matches(msg, k.MarkAll):
+		m.markAll()
 	case key.Matches(msg, k.Search):
 		return m, m.openSearch()
 	case key.Matches(msg, k.StatusFilter):
@@ -289,9 +296,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.detail = !m.detail
 		}
 	case key.Matches(msg, k.Close):
-		if m.detail {
+		switch {
+		case m.detail:
 			m.detail = false
-		} else if m.filtering() {
+		case m.markCount() > 0:
+			m.clearMarks()
+		case m.filtering():
 			m.clearFilters()
 		}
 	}
@@ -467,7 +477,7 @@ func (m Model) tabBar() string {
 
 func (m Model) footer() string {
 	_, detail := m.detailItem()
-	footer := m.statusLine() + "\n" + m.help.View(tabKeys{m.keys, m.tab, detail, m.filtering()})
+	footer := m.statusLine() + "\n" + m.help.View(tabKeys{m.keys, m.tab, detail, m.filtering(), m.markCount() > 0})
 	if err := m.mgr.SaveError(); err != nil {
 		footer = errorStyle.Render(" saving queue: "+err.Error()) + "\n" + footer
 	}
@@ -552,7 +562,11 @@ func (m Model) tableView(cols []column, cells func(int, queue.Item) []cell, empt
 		}
 		// Number rows by their position in the whole list, not the filtered one.
 		pos := slices.IndexFunc(all, func(it queue.Item) bool { return it.ID == items[i].ID })
-		lines = append(lines, renderRow(cols, widths, cells(pos, items[i]), base, m.width))
+		line := renderRow(cols, widths, cells(pos, items[i]), base, m.width)
+		if m.marks[m.tab][items[i].ID] {
+			line = markStyle.Inherit(base).Render(markGlyph) + ansi.Cut(line, 1, m.width)
+		}
+		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
 }

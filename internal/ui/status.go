@@ -43,17 +43,23 @@ func (s summary) countsLabel() string {
 	return strings.Join(parts, " · ")
 }
 
-// statusLine shows the total speed and the number of downloads per status.
+// statusLine shows the total speed, the number of downloads per status and
+// the number of marked rows on the current tab.
 func (m Model) statusLine() string {
 	s := summarize(m.queue)
 	counts := s.countsLabel()
-	if counts == "" {
-		return dimStyle.Render(" No active downloads")
-	}
-	line := " " + counts
-	if s.speed > 0 {
+	var line string
+	switch {
+	case counts == "":
+		line = dimStyle.Render(" No active downloads")
+	case s.speed > 0:
 		speed := lipgloss.NewStyle().Foreground(statusColors[queue.Downloading]).Render("↓ " + humanSpeed(s.speed))
 		line = " " + speed + dimStyle.Render(" · ") + counts
+	default:
+		line = " " + counts
+	}
+	if marks := m.marksLabel(); marks != "" {
+		line += dimStyle.Render(" · ") + marks
 	}
 	return line
 }
