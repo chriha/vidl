@@ -203,6 +203,25 @@ func TestRetryOnlyFailed(t *testing.T) {
 	}
 }
 
+func TestRetryFinishedRedownloads(t *testing.T) {
+	m, mgr, r := newTestModel(t, 1, "a")
+	m = finishAll(t, m, mgr, r, "a")
+	first := m.history[0]
+	m = press(t, m, "2", "R")
+	if m.toast.err != nil {
+		t.Fatalf("re-download: err = %v", m.toast.err)
+	}
+	// The fake finishes the second run at once, so wait for its outcome.
+	waitFor(t, "re-download", func() bool {
+		it, _ := mgr.Get(first.ID)
+		return it.Status == queue.Finished && it.StartedAt.After(first.StartedAt)
+	})
+	m = update(t, m, changedMsg{})
+	if len(m.history) != 1 || m.history[0].ID != first.ID || len(m.queue) != 0 {
+		t.Errorf("queue = %+v, history = %+v", m.queue, m.history)
+	}
+}
+
 func selectURL(t *testing.T, m Model, url string) Model {
 	t.Helper()
 	m = press(t, m, "g")

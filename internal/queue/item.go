@@ -94,3 +94,17 @@ func (it *Item) addPartFiles(files []string) {
 		}
 	}
 }
+
+// redownload reports whether the item finished before and is being
+// downloaded again.
+func (it *Item) redownload() bool {
+	return !it.FinishedAt.IsZero()
+}
+
+// takePartFiles clears the partial files and returns them for deletion,
+// leaving out the file of an earlier finished download.
+func (it *Item) takePartFiles() []string {
+	files := slices.DeleteFunc(it.PartFiles, func(f string) bool { return f == it.FilePath })
+	it.PartFiles = nil
+	return files
+}

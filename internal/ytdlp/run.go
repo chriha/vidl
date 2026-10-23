@@ -27,6 +27,7 @@ type Job struct {
 	RateLimit          string // e.g. "5M", empty for unlimited
 	CookiesFromBrowser string // e.g. "firefox", empty to disable
 	Clip               Clip   // part of the video to download; zero for all of it
+	ForceOverwrites    bool   // replace an existing file instead of skipping the download
 }
 
 // Args returns the full yt-dlp argument list for the job.
@@ -64,6 +65,9 @@ func (j Job) Args() []string {
 	}
 	if j.CookiesFromBrowser != "" {
 		args = append(args, "--cookies-from-browser", j.CookiesFromBrowser)
+	}
+	if j.ForceOverwrites {
+		args = append(args, "--force-overwrites")
 	}
 	return append(args, "--", j.URL)
 }

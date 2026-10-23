@@ -88,6 +88,13 @@ func (k tabKeys) searchKey() key.Binding {
 	return k.Search
 }
 
+// redownloadKey is R with its Finished-tab meaning.
+func (k tabKeys) redownloadKey() key.Binding {
+	b := k.Retry
+	b.SetHelp("R", "re-download")
+	return b
+}
+
 // escKeys is esc's current meaning: closing the panel, then clearing the
 // marks, then the filter.
 func (k tabKeys) escKeys() []key.Binding {
@@ -121,7 +128,7 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 	case tabDownloads:
 		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.Remove, k.ClearHistory}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.redownloadKey(), k.Remove, k.ClearHistory}, tabs, general}
 	case tabSettings:
 		return [][]key.Binding{{k.Up, k.Down, k.Top, k.Bottom}, {k.Edit, k.Toggle, k.Decrease, k.Increase}, {k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3}, general}
 	}
