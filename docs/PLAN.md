@@ -122,7 +122,7 @@ internal/ui/           Bubble Tea root model
   --no-playlist --color never`, two `--progress-template`s (download,
   postprocess) and two `--print`s (`before_dl` info JSON, `after_move` final
   path), `-P <dir>`, then format args and optional flags, and the URL after
-  `--`.
+  `--`. `Job.ForceOverwrites` adds `--force-overwrites` (re-downloads only).
 - All injected lines carry a prefix (`vidl-dl:`, `vidl-pp:`, `vidl-info:`,
   `vidl-file:`); everything else is an `EventLog` line.
 - `Tracker` computes overall percent as `(finishedStreams + currentFraction)
@@ -151,7 +151,7 @@ Manager API (all safe for concurrent use; reads return copies):
 | `Get(id)` | Copy of one item from queue or history. |
 | `Config()` / `SetConfig(cfg)` | Normalizes, reschedules (higher concurrency starts more immediately). |
 | `Add(...NewItem) []string` | Appends; empty format/resolution fall back to config defaults. |
-| `Start(id)` | Force-starts (ignores the limit), also retries Failed/Cancelled/Paused. |
+| `Start(id)` | Force-starts (ignores the limit), also retries Failed/Cancelled/Paused. A history item moves back to the queue and re-downloads with `--force-overwrites`. |
 | `Pause(id)` | Running: interrupt, keep part files → `Paused`. Queued: → `Paused`. |
 | `Cancel(id)` | Interrupt and delete part files → `Cancelled`. |
 | `Remove(id)` | From queue or history; running ones are stopped and part files deleted; finished files are kept. |
@@ -161,8 +161,12 @@ Manager API (all safe for concurrent use; reads return copies):
 | `Close()` | Stops running downloads as `Queued`, waits, saves. |
 
 Status flow: `Queued → Downloading → Finished | Paused | Failed | Cancelled`;
-`Start` moves any non-finished status back to `Downloading`. Finished items
-move from `queue` to the front of `history`.
+`Start` moves any status back to `Downloading`. Finished items
+move from `queue` to the front of `history`; re-downloading one moves it back
+to the end of `queue` until it finishes again.
+A queued item with a non-zero `FinishedAt` is a re-download: its job passes
+`--force-overwrites`, and `FilePath`/`Size` keep pointing at the previous file
+until the new one is done. Part-file cleanup never deletes `FilePath`.
 
 Invariants worth keeping:
 

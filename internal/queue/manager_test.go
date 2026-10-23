@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -17,13 +18,14 @@ import (
 type fakeRunner struct {
 	mu      sync.Mutex
 	results map[string]chan error
-	parts   map[string]string // url -> part file reported as being written
-	files   map[string]string // url -> final path, instead of /dl/<url>.mp4
+	parts   map[string][]string  // url -> files reported as being written
+	files   map[string]string    // url -> final path, instead of /dl/<url>.mp4
+	jobs    map[string]ytdlp.Job // url -> most recent job
 	started chan string
 }
 
 func newFakeRunner() *fakeRunner {
-	return &fakeRunner{results: map[string]chan error{}, parts: map[string]string{}, files: map[string]string{}, started: make(chan string, 100)}
+	return &fakeRunner{results: map[string]chan error{}, parts: map[string][]string{}, files: map[string]string{}, jobs: map[string]ytdlp.Job{}, started: make(chan string, 100)}
 }
 
 func (f *fakeRunner) result(url string) chan error {
@@ -38,17 +40,16 @@ func (f *fakeRunner) result(url string) chan error {
 func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.Event)) error {
 	res := f.result(job.URL)
 	f.mu.Lock()
-	part := f.parts[job.URL]
+	parts := f.parts[job.URL]
 	file := f.files[job.URL]
+	f.jobs[job.URL] = job
 	f.mu.Unlock()
 	if file == "" {
 		file = "/dl/" + job.URL + ".mp4"
 	}
 	onEvent(ytdlp.Event{Kind: ytdlp.EventInfo, Info: ytdlp.VideoInfo{Title: "title of " + job.URL}})
 	ev := ytdlp.Event{Kind: ytdlp.EventProgress, Progress: ytdlp.Progress{Percent: 50, Speed: 1000}}
-	if part != "" {
-		ev.Files = []string{part}
-	}
+	ev.Files = parts
 	onEvent(ev)
 	f.started <- job.URL
 	select {
@@ -63,6 +64,14 @@ func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.
 }
 
 func (f *fakeRunner) finish(url string, err error) { f.result(url) <- err }
+
+// overwrites reports whether the most recent run of url asked yt-dlp to
+// replace an existing file.
+func (f *fakeRunner) overwrites(url string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.jobs[url].Args(), "--force-overwrites")
+}
 
 // waitStarted waits until exactly the given downloads have started, in any
 // order, since concurrent downloads start in parallel goroutines.
@@ -186,7 +195,7 @@ func TestPauseAndResumeKeepsPartFiles(t *testing.T) {
 	m, r := newManager(t, 1, &MemStore{})
 	part := filepath.Join(t.TempDir(), "a.part")
 	os.WriteFile(part, nil, 0o644)
-	r.parts["a"] = part
+	r.parts["a"] = []string{part}
 	ids := add(m, "a", "b")
 	r.waitStarted(t, "a")
 
@@ -215,7 +224,7 @@ func TestCancelDeletesPartFiles(t *testing.T) {
 	frag := part + "-Frag3"
 	os.WriteFile(part, nil, 0o644)
 	os.WriteFile(frag, nil, 0o644)
-	r.parts["a"] = part
+	r.parts["a"] = []string{part}
 	id := add(m, "a")[0]
 	r.waitStarted(t, "a")
 
@@ -254,6 +263,9 @@ func TestFailureAndRetry(t *testing.T) {
 
 	m.Start(id)
 	r.waitStarted(t, "a")
+	if r.overwrites("a") {
+		t.Error("retrying a failed download must not overwrite files")
+	}
 	r.finish("a", nil)
 	waitStatus(t, m, id, Finished)
 	if it, _ := m.Get(id); it.Error != "" {
@@ -290,7 +302,7 @@ func TestRemove(t *testing.T) {
 	m, r := newManager(t, 1, &MemStore{})
 	part := filepath.Join(t.TempDir(), "a.part")
 	os.WriteFile(part, nil, 0o644)
-	r.parts["a"] = part
+	r.parts["a"] = []string{part}
 	ids := add(m, "a", "b")
 	r.waitStarted(t, "a")
 
@@ -338,6 +350,128 @@ func TestPersistenceAcrossRestart(t *testing.T) {
 	_, history := m2.Snapshot()
 	if len(history) != 1 || history[0].ID != ids[0] {
 		t.Errorf("history = %+v", history)
+	}
+}
+
+// finishedItem downloads url to a real 1234-byte file and returns its id and path.
+func finishedItem(t *testing.T, m *Manager, r *fakeRunner, url string) (id, path string) {
+	t.Helper()
+	path = filepath.Join(t.TempDir(), url+".mp4")
+	if err := os.WriteFile(path, make([]byte, 1234), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.mu.Lock()
+	r.files[url] = path
+	r.mu.Unlock()
+	id = add(m, url)[0]
+	r.waitStarted(t, url)
+	r.finish(url, nil)
+	waitStatus(t, m, id, Finished)
+	return id, path
+}
+
+func TestRedownloadFinished(t *testing.T) {
+	m, r := newManager(t, 1, &MemStore{})
+	id, path := finishedItem(t, m, r, "a")
+	if r.overwrites("a") {
+		t.Error("first download must not overwrite files")
+	}
+
+	if err := m.Start(id); err != nil {
+		t.Fatal(err)
+	}
+	r.waitStarted(t, "a")
+	if !r.overwrites("a") {
+		t.Error("re-download must pass --force-overwrites")
+	}
+	q, h := m.Snapshot()
+	if len(q) != 1 || q[0].ID != id || q[0].Status != Downloading || len(h) != 0 {
+		t.Fatalf("while re-downloading: queue = %+v, history = %+v", q, h)
+	}
+	if q[0].FilePath != path || q[0].Size != 1234 {
+		t.Errorf("previous file lost while re-downloading: path %q, size %d", q[0].FilePath, q[0].Size)
+	}
+
+	r.finish("a", nil)
+	waitStatus(t, m, id, Finished)
+	if q, h := m.Snapshot(); len(q) != 0 || len(h) != 1 || h[0].ID != id {
+		t.Errorf("after re-download: queue = %+v, history = %+v", q, h)
+	}
+}
+
+func TestRedownloadStopped(t *testing.T) {
+	tests := []struct {
+		name string
+		stop func(m *Manager, r *fakeRunner, id string)
+		want Status
+	}{
+		{"failed", func(_ *Manager, r *fakeRunner, _ string) { r.finish("a", errors.New("HTTP Error 403")) }, Failed},
+		{"cancelled", func(m *Manager, _ *fakeRunner, id string) { m.Cancel(id) }, Cancelled},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, r := newManager(t, 1, &MemStore{})
+			id, path := finishedItem(t, m, r, "a")
+			part := path + ".part"
+			if err := os.WriteFile(part, nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			// A single-stream download reports its final path as being
+			// written, which is the previous download's file. It comes first
+			// so that it would be gone by the time the part file is.
+			r.mu.Lock()
+			r.parts["a"] = []string{path, part}
+			r.mu.Unlock()
+
+			m.Start(id)
+			r.waitStarted(t, "a")
+			tt.stop(m, r, id)
+			waitStatus(t, m, id, tt.want)
+			if tt.want == Cancelled {
+				waitFor(t, "part file deletion", func() bool {
+					_, err := os.Stat(part)
+					return errors.Is(err, os.ErrNotExist)
+				})
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("previous file deleted: %v", err)
+			}
+			q, h := m.Snapshot()
+			if len(q) != 1 || q[0].ID != id || len(h) != 0 {
+				t.Fatalf("queue = %+v, history = %+v", q, h)
+			}
+			if q[0].FilePath != path || q[0].Size != 1234 {
+				t.Errorf("previous file forgotten: path %q, size %d", q[0].FilePath, q[0].Size)
+			}
+
+			m.Start(id)
+			r.waitStarted(t, "a")
+			if !r.overwrites("a") {
+				t.Error("retrying a re-download must still overwrite")
+			}
+		})
+	}
+}
+
+func TestRedownloadAcrossRestart(t *testing.T) {
+	store := FileStore{Path: filepath.Join(t.TempDir(), "queue.json")}
+	m, r := newManager(t, 1, store)
+	id, _ := finishedItem(t, m, r, "a")
+	m.Start(id)
+	r.waitStarted(t, "a")
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	m2, r2 := newManager(t, 1, store)
+	r2.waitStarted(t, "a") // the interrupted re-download resumes
+	if !r2.overwrites("a") {
+		t.Error("resumed re-download must pass --force-overwrites")
+	}
+	r2.finish("a", nil)
+	waitStatus(t, m2, id, Finished)
+	if q, h := m2.Snapshot(); len(q) != 0 || len(h) != 1 || h[0].ID != id {
+		t.Errorf("queue = %+v, history = %+v", q, h)
 	}
 }
 

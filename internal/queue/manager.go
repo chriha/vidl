@@ -180,14 +180,25 @@ func (m *Manager) Add(reqs ...NewItem) []string {
 }
 
 // Start starts or resumes a download immediately, even if that exceeds the
-// concurrency limit. Failed and cancelled downloads are retried.
+// concurrency limit. Failed and cancelled downloads are retried; finished
+// ones move back to the queue and are downloaded again, replacing the file.
 func (m *Manager) Start(id string) error {
 	m.mu.Lock()
 	defer m.notify()
 	defer m.mu.Unlock()
 	it := m.findQueuedLocked(id)
 	if it == nil {
-		return ErrNotFound
+		i := slices.IndexFunc(m.history, byID(id))
+		if i < 0 {
+			return ErrNotFound
+		}
+		if m.closed {
+			return nil
+		}
+		it = m.history[i]
+		m.history = slices.Delete(m.history, i, i+1)
+		it.Progress = ytdlp.Progress{}
+		m.queue = append(m.queue, it)
 	}
 	if it.Status == Downloading || m.closed {
 		return nil
@@ -223,7 +234,7 @@ func (m *Manager) stop(id string, cause error, status Status) error {
 	case Queued, Paused, Failed:
 		it.Status = status
 		if status == Cancelled {
-			cleanup, it.PartFiles = it.PartFiles, nil
+			cleanup = it.takePartFiles()
 			it.Progress = ytdlp.Progress{}
 		}
 		m.saveLocked()
@@ -247,7 +258,7 @@ func (m *Manager) Remove(id string) error {
 		if cancel, ok := m.active[id]; ok {
 			cancel(errRemoved)
 		} else {
-			cleanup = it.PartFiles
+			cleanup = it.takePartFiles()
 		}
 	} else {
 		m.mu.Unlock()
@@ -383,6 +394,7 @@ func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 		EmbedMetadata:      c.EmbedMetadata,
 		RateLimit:          c.RateLimit,
 		CookiesFromBrowser: c.CookiesFromBrowser,
+		ForceOverwrites:    it.redownload(),
 	}
 }
 
@@ -417,7 +429,7 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, it *I
 		// Part files of a single-stream download include its final path, so
 		// keep them if the download completed before the stop took effect.
 		if err != nil {
-			cleanup = it.PartFiles
+			cleanup = it.takePartFiles()
 		}
 	case err == nil:
 		// Also covers a stop request that raced with a completed download.
@@ -440,7 +452,7 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, it *I
 	case cause == errCancelled:
 		it.Status = Cancelled
 		it.Progress = ytdlp.Progress{}
-		cleanup, it.PartFiles = it.PartFiles, nil
+		cleanup = it.takePartFiles()
 	default:
 		it.Status = Failed
 		it.Error = err.Error()

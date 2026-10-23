@@ -46,7 +46,7 @@ const (
 	minHeight = 8
 )
 
-var errNotRetryable = errors.New("only failed or cancelled downloads can be retried")
+var errNotRetryable = errors.New("only failed, cancelled or finished downloads can be retried")
 
 type changedMsg struct{}
 
@@ -266,7 +266,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, k.Cancel):
 		m.act(m.mgr.Cancel)
 	case key.Matches(msg, k.Retry):
-		m.act(m.retry)
+		m.retrySelected()
 	case key.Matches(msg, k.MoveUp):
 		m.act(func(id string) error { return m.mgr.Move(id, -1) })
 		m.refresh()
@@ -393,9 +393,20 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
+// retrySelected retries a failed or cancelled download, or downloads a
+// finished one again.
+func (m *Model) retrySelected() {
+	if m.tab != tabDownloads && m.tab != tabFinished {
+		return
+	}
+	if it, ok := m.selected(); ok {
+		m.report(m.retry(it.ID))
+	}
+}
+
 func (m Model) retry(id string) error {
 	it, ok := m.mgr.Get(id)
-	if !ok || (it.Status != queue.Failed && it.Status != queue.Cancelled) {
+	if !ok || (it.Status != queue.Failed && it.Status != queue.Cancelled && it.Status != queue.Finished) {
 		return errNotRetryable
 	}
 	return m.mgr.Start(id)

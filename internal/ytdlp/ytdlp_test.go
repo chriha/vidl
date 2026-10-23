@@ -179,6 +179,7 @@ func TestJobArgsPerJobOptions(t *testing.T) {
 		subs         bool
 		subLangs     string // "" = no --sub-langs
 		forceKeyCuts bool
+		overwrite    bool // --force-overwrites
 	}{
 		{name: "defaults", job: Job{Format: MP4}},
 		{
@@ -210,6 +211,7 @@ func TestJobArgsPerJobOptions(t *testing.T) {
 		{name: "subtitles without langs", job: Job{Format: MKV, EmbedSubtitles: true}, subs: true},
 		{name: "subtitles off ignores langs", job: Job{Format: MKV, SubtitleLangs: "de"}},
 		{name: "subtitles skipped for audio", job: Job{Format: M4A, EmbedSubtitles: true, SubtitleLangs: "en"}},
+		{name: "re-download overwrites", job: Job{Format: MP4, ForceOverwrites: true}, overwrite: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -237,6 +239,9 @@ func TestJobArgsPerJobOptions(t *testing.T) {
 			got, ok = argValue(opts, "--sub-langs")
 			if ok != (tt.subLangs != "") || got != tt.subLangs {
 				t.Errorf("--sub-langs = %q (present %v), want %q", got, ok, tt.subLangs)
+			}
+			if has := slices.Contains(opts, "--force-overwrites"); has != tt.overwrite {
+				t.Errorf("--force-overwrites present = %v, want %v", has, tt.overwrite)
 			}
 		})
 	}
