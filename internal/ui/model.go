@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -59,11 +60,14 @@ type Model struct {
 	sel     [tabCount]string // id under the cursor, followed across refreshes
 	offset  [tabCount]int    // first visible row
 	confirm *confirmRemove
+	detail  bool           // detail panel open
+	log     viewport.Model // yt-dlp output in the detail panel
 	err     error
 }
 
 func New(mgr *queue.Manager) Model {
-	m := Model{mgr: mgr, keys: newKeyMap(), help: help.New()}
+	m := Model{mgr: mgr, keys: newKeyMap(), help: help.New(), log: viewport.New()}
+	m.log.SoftWrap = true
 	m.refresh()
 	return m
 }
@@ -100,6 +104,12 @@ func (m *Model) refresh() {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	next.syncLog()
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -165,11 +175,17 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.refresh()
 	case key.Matches(msg, k.Remove):
 		m.askRemove()
+	case key.Matches(msg, k.Detail):
+		if _, ok := m.selected(); ok || m.detail {
+			m.detail = !m.detail
+		}
+	case key.Matches(msg, k.Close):
+		m.detail = false
 	}
 	return m, nil
 }
 
-func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
@@ -283,7 +299,8 @@ func (m Model) tabBar() string {
 }
 
 func (m Model) footer() string {
-	footer := m.help.View(tabKeys{m.keys, m.tab})
+	_, detail := m.detailItem()
+	footer := m.help.View(tabKeys{m.keys, m.tab, detail})
 	if m.err != nil {
 		footer = errorStyle.Render(m.err.Error()) + "\n" + footer
 	} else if err := m.mgr.SaveError(); err != nil {
@@ -303,7 +320,7 @@ func (m Model) bodyHeight() int {
 
 // tableRows is the number of item rows visible below the table header.
 func (m Model) tableRows() int {
-	return max(m.bodyHeight()-1, 1)
+	return max(m.bodyHeight()-m.detailHeight()-1, 1)
 }
 
 func (m Model) render() string {
@@ -320,6 +337,10 @@ func (m Model) render() string {
 		body = m.tableView(finishedColumns, finishedCells, "Nothing finished yet.")
 	case tabSettings:
 		body = dimStyle.Render("Settings coming soon.")
+	}
+	if panel := m.detailView(); panel != "" {
+		tableH := bodyHeight - m.detailHeight()
+		body = lipgloss.NewStyle().Height(tableH).MaxHeight(tableH).Render(body) + "\n" + panel
 	}
 	body = lipgloss.NewStyle().Height(bodyHeight).MaxHeight(bodyHeight).Render(body)
 	if m.confirm != nil {

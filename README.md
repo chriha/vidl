@@ -11,8 +11,8 @@ downloads resume where they stopped.
 
 > **Status:** early development. The download engine, queue, persistence and
 > configuration are complete and tested, and so are the Downloads and Finished
-> tables; the detail panel, new-download dialog and settings editor are in
-> progress.
+> tables and the detail panel; the new-download dialog and settings editor are
+> in progress.
 > See [Roadmap](#roadmap) for what works today.
 
 ## Features
@@ -25,6 +25,9 @@ downloads resume where they stopped.
   download resumes; cancelling deletes them.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads with their file paths.
+- **Detail panel** for any download: source, format, progress per stream,
+  timestamps, output and partial files, errors, and yt-dlp's latest output
+  for running or failed downloads.
 - **Persistence**: queue and history are saved on every change; downloads
   running when you quit are resumed on the next start.
 - **Output formats**: mp4, mkv, webm (video) and mp3, m4a, opus (audio only),
@@ -128,7 +131,8 @@ automatically the next time you start vidl.
 | `s`                   | Start or resume; retries failed or cancelled   | ✅      |
 | `p`                   | Pause                                          | ✅      |
 | `c`                   | Cancel (deletes partial files)                 | ✅      |
-| `enter`               | Toggle the detail panel                        | planned |
+| `enter`               | Toggle the detail panel                        | ✅      |
+| `esc`                 | Close the detail panel                         | ✅      |
 | `n`                   | New download                                   | planned |
 | `r`                   | Remove (asks for confirmation)                 | ✅      |
 | `u` / `d`             | Move queued download up / down                 | ✅      |
@@ -297,7 +301,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Configuration file
 - [x] UI scaffold: tabs, navigation, help
 - [x] Downloads and Finished tables with progress bars, speed and ETA
-- [ ] Detail panel (`enter`)
+- [x] Detail panel (`enter`)
 - [ ] New-download dialog with format and resolution selection, playlist
       expansion and multi-URL paste
 - [ ] Settings tab

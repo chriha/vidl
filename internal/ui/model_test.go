@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -17,11 +18,13 @@ import (
 )
 
 // fakeRunner fails URLs starting with "fail", and blocks the rest until
-// cancelled or released with finish.
+// cancelled or released with finish. Every run first logs fakeLogLines lines.
 type fakeRunner struct {
 	mu   sync.Mutex
 	done map[string]chan struct{}
 }
+
+const fakeLogLines = 30
 
 func (f *fakeRunner) ch(url string) chan struct{} {
 	f.mu.Lock()
@@ -38,6 +41,9 @@ func (f *fakeRunner) ch(url string) chan struct{} {
 func (f *fakeRunner) finish(url string) { close(f.ch(url)) }
 
 func (f *fakeRunner) Run(ctx context.Context, job ytdlp.Job, onEvent func(ytdlp.Event)) error {
+	for i := range fakeLogLines {
+		onEvent(ytdlp.Event{Kind: ytdlp.EventLog, Line: fmt.Sprintf("%s line %d", job.URL, i+1)})
+	}
 	if strings.HasPrefix(job.URL, "fail") {
 		return errors.New("boom")
 	}
@@ -84,6 +90,8 @@ func press(t *testing.T, m Model, keys ...string) Model {
 		switch k {
 		case "esc":
 			msg = tea.KeyPressMsg{Code: tea.KeyEscape}
+		case "enter":
+			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
 		case "ctrl+d", "ctrl+u":
 			msg = tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 		default:

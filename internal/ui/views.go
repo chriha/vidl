@@ -68,11 +68,8 @@ var finishedColumns = []column{
 
 func finishedCells(_ int, it queue.Item) []cell {
 	res, size, file := "–", "–", ""
-	if !it.Format.IsAudio() && it.Resolution != "" {
-		res = it.Resolution
-		if res != "best" {
-			res += "p"
-		}
+	if l := resolutionLabel(it); l != "" {
+		res = l
 	}
 	if it.Size > 0 {
 		size = humanBytes(it.Size)

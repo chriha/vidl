@@ -1,8 +1,8 @@
 # vidl implementation plan
 
-Handoff document for continuing development. Milestones 1–4 are done;
+Handoff document for continuing development. Milestones 1–5 are done;
 this file describes what was decided, what exists, what was learned the hard
-way, and what remains (milestones 5–8) in enough detail to proceed without
+way, and what remains (milestones 6–8) in enough detail to proceed without
 the original conversation.
 
 Read `README.md` first for the user-facing picture, then this file.
@@ -159,14 +159,16 @@ Invariants worth keeping:
 - State is saved on structural changes, not on every progress event.
 - `Item.Log` (last 200 output lines) is in memory only (`json:"-"`).
 
-### UI (current scaffold)
+### UI
 
 `ui.Model` holds `*queue.Manager`, a `keyMap`, `help.Model`, the current
-tab, window size, the latest snapshot and a cursor per tab. It waits on
-`mgr.Changes()` via a `tea.Cmd` that returns `changedMsg`, refreshes the
-snapshot and re-arms. The list is a plain-text placeholder. `s`/`p`/`c` act
-on the selected item on the Downloads tab. Errors from actions show above the
-help footer.
+tab, window size, the latest snapshot, and a cursor, selected id and scroll
+offset per tab. It waits on `mgr.Changes()` via a `tea.Cmd` that returns
+`changedMsg`, refreshes the snapshot and re-arms. `table.go`/`views.go` render
+the Downloads and Finished tables; `detail.go` renders the detail panel
+(`enter`/`esc`) below the table, with the log in a `bubbles/v2/viewport`.
+`Update` wraps `update` so the viewport is synced after every message. Errors
+from actions show above the help footer.
 
 ## Lessons learned (don't rediscover these)
 
@@ -192,6 +194,12 @@ help footer.
 - **Tables**: `bubbles/v2/progress` pulls in `harmonica` (a `go.mod` change),
   so `ui/table.go` draws a static bar itself. `help.Model` can overshoot its
   width by one item, so the footer is truncated with `ansi.Truncate`.
+- **Detail panel** (`ui/detail.go`): `detailHeight()` is 0 whenever the
+  panel is closed, has no item or doesn't fit, and both `tableRows()` and
+  `detailView()` rely on that, so check it rather than `m.detail`. The log
+  viewport is synced in `Update` (`syncLog`), never in `View`, and always
+  jumps to the bottom. Terminals narrower than the tab bar (~31 columns)
+  still overflow; that's milestone 8.
 - **Manual checks in tmux**: use a private server (`tmux -L vidl-test`) and
   never `kill-session` on the default one; the developer may be running the
   agent inside a tmux session with the same name.
@@ -212,7 +220,7 @@ help footer.
 
 ## Remaining milestones
 
-Suggested order: 4 → 5 → 6 → 7 → 8. Each should be usable on its own.
+Suggested order: 4 → 5 → 6 → 7 → 8 (4 and 5 are done). Each should be usable on its own.
 
 ### Milestone 4: Downloads and Finished tables
 
