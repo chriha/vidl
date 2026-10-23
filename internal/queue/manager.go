@@ -44,6 +44,9 @@ type NewItem struct {
 	Clip      ytdlp.Clip // single videos only
 	Template  string     // filename template
 	Subtitles *bool      // embed subtitles
+
+	// SponsorBlock false skips the sponsorblock_remove setting; nil follows it.
+	SponsorBlock *bool
 }
 
 // Manager owns the download queue and history. Queued items start
@@ -158,36 +161,46 @@ func (m *Manager) Add(reqs ...NewItem) []string {
 	defer m.mu.Unlock()
 	ids := make([]string, 0, len(reqs))
 	for _, r := range reqs {
-		it := &Item{
-			ID:         newID(),
-			URL:        r.URL,
-			Title:      r.Title,
-			Uploader:   r.Uploader,
-			Duration:   r.Duration,
-			Extractor:  r.Extractor,
-			Format:     r.Format,
-			Resolution: r.Resolution,
-			Status:     Queued,
-			AddedAt:    time.Now(),
-			ClipStart:  r.Clip.Start,
-			ClipEnd:    r.Clip.End,
-			Template:   r.Template,
-		}
-		if r.Subtitles != nil {
-			it.Subtitles = new(*r.Subtitles)
-		}
-		if !it.Format.Valid() {
-			it.Format = m.cfg.DefaultFormat
-		}
-		if it.Resolution == "" {
-			it.Resolution = m.cfg.DefaultResolution
-		}
+		it := newItem(r, m.cfg)
 		m.queue = append(m.queue, it)
 		ids = append(ids, it.ID)
 	}
 	m.scheduleLocked()
 	m.saveLocked()
 	return ids
+}
+
+// newItem builds a queued item for r; a missing format or resolution
+// follows cfg.
+func newItem(r NewItem, cfg config.Config) *Item {
+	it := &Item{
+		ID:         newID(),
+		URL:        r.URL,
+		Title:      r.Title,
+		Uploader:   r.Uploader,
+		Duration:   r.Duration,
+		Extractor:  r.Extractor,
+		Format:     r.Format,
+		Resolution: r.Resolution,
+		Status:     Queued,
+		AddedAt:    time.Now(),
+		ClipStart:  r.Clip.Start,
+		ClipEnd:    r.Clip.End,
+		Template:   r.Template,
+	}
+	if r.Subtitles != nil {
+		it.Subtitles = new(*r.Subtitles)
+	}
+	if r.SponsorBlock != nil {
+		it.SponsorBlock = new(*r.SponsorBlock)
+	}
+	if !it.Format.Valid() {
+		it.Format = cfg.DefaultFormat
+	}
+	if it.Resolution == "" {
+		it.Resolution = cfg.DefaultResolution
+	}
+	return it
 }
 
 // Start starts or resumes a download immediately, even if that exceeds the
@@ -423,6 +436,10 @@ func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 	if it.Subtitles != nil {
 		subtitles = *it.Subtitles
 	}
+	sponsorBlock := c.SponsorBlockRemove
+	if it.SponsorBlock != nil && !*it.SponsorBlock {
+		sponsorBlock = ""
+	}
 	return ytdlp.Job{
 		URL:                it.URL,
 		Dir:                c.DownloadPath(),
@@ -437,6 +454,7 @@ func (m *Manager) jobLocked(it *Item) ytdlp.Job {
 		CookiesFromBrowser: c.CookiesFromBrowser,
 		Clip:               it.Clip(),
 		ForceOverwrites:    it.redownload(),
+		SponsorBlockRemove: sponsorBlock,
 	}
 }
 
@@ -534,10 +552,10 @@ func applyEvent(it *Item, ev ytdlp.Event) {
 func (m *Manager) saveLocked() {
 	st := State{}
 	for _, it := range m.queue {
-		st.Queue = append(st.Queue, it.clone())
+		st.Queue = append(st.Queue, it.saved())
 	}
 	for _, it := range m.history {
-		st.History = append(st.History, it.clone())
+		st.History = append(st.History, it.saved())
 	}
 	m.saveErr = m.store.Save(st)
 }

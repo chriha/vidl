@@ -171,6 +171,9 @@ func (m Model) detailFields(it queue.Item, w int) []string {
 	default:
 		add("Subtitles", "off")
 	}
+	if it.SponsorBlock != nil && !*it.SponsorBlock {
+		add("Sponsors", "kept")
+	}
 	if it.Status == queue.Finished {
 		if it.Size > 0 {
 			add("Size", humanBytes(it.Size))

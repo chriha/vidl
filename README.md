@@ -17,8 +17,8 @@ downloads resume where they stopped.
 - **New-download dialog**: paste a URL (prefilled from the clipboard), see
   its title, uploader, duration and approximate size, pick a format and
   resolution, and queue it. Per download you can also download only a clip
-  (start and end time), use a different filename template, or turn embedded
-  subtitles on or off. Playlists queue every entry; pasting several URLs at
+  (start and end time), use a different filename template, turn embedded
+  subtitles on or off, or keep sponsor segments. Playlists queue every entry; pasting several URLs at
   once queues them all with the default settings.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
@@ -42,13 +42,18 @@ downloads resume where they stopped.
   for running or failed downloads.
 - **Desktop notifications** when a download finishes or fails. Downloads
   ending within about two seconds of each other share one notification.
+- **`vidl add`** hands URLs to the running vidl from scripts or browser
+  hooks. Only one vidl runs at a time; with none running, the URLs wait in the
+  saved queue for the next start.
 - **Persistence**: queue and history are saved on every change; downloads
   running when you quit are resumed on the next start.
 - **Output formats**: mp4, mkv, webm (video) and mp3, m4a, opus (audio only),
   with a maximum resolution from 360p up to 2160p or best available.
 - **yt-dlp options** exposed as settings: filename template, embedded
-  subtitles, thumbnails and metadata, rate limit, and cookies from your
-  browser for private or age-restricted videos.
+  subtitles, thumbnails and metadata, rate limit, cookies from your
+  browser for private or age-restricted videos, and
+  [SponsorBlock](https://sponsor.ajay.app/) to cut sponsor segments and
+  other categories out of videos.
 - **Vim-style navigation.**
 
 ## Requirements
@@ -139,6 +144,7 @@ To uninstall, run `make uninstall` and optionally remove the config directory
 ```sh
 vidl                        # open the UI
 vidl <url> [<url>...]       # open the UI and queue the given URLs
+vidl add <url> [<url>...]   # queue URLs in the running vidl
 vidl --version
 vidl --help
 ```
@@ -147,6 +153,21 @@ Quote URLs in your shell, since characters like `?` and `&` are special:
 
 ```sh
 vidl 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
+```
+
+Only one vidl runs at a time, since it owns the queue file. While it runs,
+`vidl add <url>` hands the URLs to it over a local socket (`vidl.sock` in the
+config directory), where they're queued with the default format and
+resolution and a toast confirms them. `vidl <url>` does the same instead of
+opening a second UI, and plain `vidl` exits with `vidl is already running`.
+With no vidl running, `vidl add` appends the URLs to the saved queue and they
+start the next time vidl opens:
+
+```sh
+vidl add 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
+# Added 1 download to the running vidl
+#   or, with no vidl running:
+# Queued 1 download; they start when vidl runs
 ```
 
 The UI has three tabs:
@@ -160,7 +181,7 @@ The UI has three tabs:
 Press `n` to add a download. If the clipboard holds a URL, it's already
 filled in; otherwise paste or type one and press `enter` to fetch its details.
 Move between the fields with `tab`/`shift+tab` or `↑`/`↓` (`j`/`k` outside
-text fields), change the file type, resolution and subtitles with `h`/`l`,
+text fields), change the file type, resolution, subtitles and sponsors with `h`/`l`,
 and type into the text fields. Then press `enter` to queue it, or `esc` to go
 back and edit the URL. Resolutions above the video's best are hidden, and
 audio formats ignore the resolution.
@@ -174,6 +195,9 @@ audio formats ignore the resolution.
   the setting; empty or unchanged follows the setting.
 - **Subtitles** embeds subtitles for this download, defaulting to the
   setting.
+- **Sponsors** removes the `sponsorblock_remove` categories from this
+  download (`remove`, the default) or keeps them (`keep`). It's only shown
+  when that setting is set.
 
 These choices stay with the download across pause, retry and restarts, and
 the detail panel lists the ones that differ from the settings. For a
@@ -277,7 +301,8 @@ when you change a setting). Invalid values fall back to their defaults.
 The Settings tab checks values as you enter them: the download folder must be
 an absolute path or start with `~`, and vidl offers to create it if it doesn't
 exist; the rate limit must be a number with an optional `K`, `M` or `G`
-suffix.
+suffix; SponsorBlock categories must be a comma-separated list of known
+categories, or `all`.
 
 ```toml
 download_dir = "~/Downloads"
@@ -292,6 +317,7 @@ embed_metadata = true
 rate_limit = ""
 cookies_from_browser = ""
 notify = true
+sponsorblock_remove = ""
 ```
 
 | Key                    | Default                       | Description |
@@ -308,6 +334,7 @@ notify = true
 | `rate_limit`           | empty (unlimited)             | Maximum download rate per download, e.g. `500K` or `5M`. |
 | `cookies_from_browser` | empty (disabled)              | Use cookies from `brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari` or `vivaldi`, for private, members-only or age-restricted videos. |
 | `notify`               | `true`                        | Desktop notification when a download finishes or fails. |
+| `sponsorblock_remove`  | empty (disabled)              | [SponsorBlock](https://sponsor.ajay.app/) categories to cut out of videos, comma-separated: `sponsor`, `intro`, `outro`, `selfpromo`, `preview`, `filler`, `interaction`, `music_offtopic`, or `all`. Cutting re-encodes around the cuts, so post-processing takes longer. |
 
 Changing settings affects downloads that start afterwards; running downloads
 keep the settings they started with. `notify` applies at once.
@@ -343,6 +370,8 @@ Audio formats download the best audio stream and convert it with ffmpeg.
 | ----------------------------- | -------- |
 | `~/.config/vidl/config.toml`  | Settings. |
 | `~/.config/vidl/queue.json`   | Queue and history, written on every status change. Safe to delete while vidl is not running to start fresh. |
+| `~/.config/vidl/queue.lock`   | Held by the running vidl so only one owns the queue; `vidl add` takes it to append while none runs. |
+| `~/.config/vidl/vidl.sock`    | Socket the running vidl listens on for `vidl add`; removed on exit. If the config path is too long for a socket, it lives under the system temp directory instead. |
 
 Partial downloads (`*.part`, `*.ytdl`, `*.part-Frag*`) live in the download
 directory until the download finishes, is cancelled or removed.
@@ -450,6 +479,11 @@ logged in.
 **`[yt-dlp ffmpeg] not found on PATH`.** Install the missing tool (see
 [Requirements](#requirements)) and check `which yt-dlp ffmpeg`.
 
+**`a running vidl holds … but does not answer on …`.** Another vidl owns the
+queue but its socket is gone or unusable (`vidl add` needs AF_UNIX sockets,
+which Windows has since Windows 10 version 1803). Add the URLs in that vidl,
+or quit it and run the command again.
+
 **A download is stuck or behaves oddly.** Run the same URL with yt-dlp
 directly to see whether the problem is the site or vidl.
 
@@ -476,6 +510,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Per-download clip range, filename template and subtitles
 - [x] Mark several downloads (`space`, `V`) and start, pause, cancel, retry
       or remove them together
+- [x] `vidl add` to queue URLs in a running vidl; single instance
 
 ## License
 

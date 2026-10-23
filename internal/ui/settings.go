@@ -120,6 +120,13 @@ var settings = []setting{
 		set: func(c *config.Config, v string) { c.CookiesFromBrowser = v },
 	},
 	{
+		label: "Remove sponsor segments", help: "SponsorBlock categories to cut out, e.g. sponsor,selfpromo, or all.", kind: kindText,
+		empty:    "off",
+		get:      func(c config.Config) string { return c.SponsorBlockRemove },
+		set:      func(c *config.Config, v string) { c.SponsorBlockRemove = v },
+		validate: validateSponsorBlock,
+	},
+	{
 		label: "Desktop notifications", help: "Notify when a download finishes or fails.", kind: kindBool,
 		get: func(c config.Config) string { return strconv.FormatBool(c.Notify) },
 		set: func(c *config.Config, v string) { c.Notify = v == "true" },
@@ -171,6 +178,23 @@ func validateRateLimit(v string) (string, error) {
 		return "", errors.New("use a number with an optional K, M or G suffix, e.g. 500K")
 	}
 	return v, nil
+}
+
+// validateSponsorBlock accepts a comma-separated list of SponsorBlock
+// categories, or "all", and returns it with whitespace removed.
+func validateSponsorBlock(v string) (string, error) {
+	if strings.TrimSpace(v) == "" {
+		return "", nil
+	}
+	cats := strings.Split(v, ",")
+	for i, c := range cats {
+		c = strings.TrimSpace(c)
+		if c != "all" && !slices.Contains(ytdlp.SponsorBlockCategories, c) {
+			return "", fmt.Errorf("unknown category %q; use all or %s", c, strings.Join(ytdlp.SponsorBlockCategories, ", "))
+		}
+		cats[i] = c
+	}
+	return strings.Join(cats, ","), nil
 }
 
 // settingsForm is the state of the Settings tab.

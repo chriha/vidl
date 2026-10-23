@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// SponsorBlockCategories are the SponsorBlock categories yt-dlp can cut out
+// with --sponsorblock-remove; "all" selects every one of them.
+var SponsorBlockCategories = []string{"sponsor", "intro", "outro", "selfpromo", "preview", "filler", "interaction", "music_offtopic"}
+
 // Job describes a single download.
 type Job struct {
 	URL                string
@@ -28,6 +32,7 @@ type Job struct {
 	CookiesFromBrowser string // e.g. "firefox", empty to disable
 	Clip               Clip   // part of the video to download; zero for all of it
 	ForceOverwrites    bool   // replace an existing file instead of skipping the download
+	SponsorBlockRemove string // comma-separated SponsorBlock categories to cut out, empty to disable
 }
 
 // Args returns the full yt-dlp argument list for the job.
@@ -65,6 +70,9 @@ func (j Job) Args() []string {
 	}
 	if j.CookiesFromBrowser != "" {
 		args = append(args, "--cookies-from-browser", j.CookiesFromBrowser)
+	}
+	if j.SponsorBlockRemove != "" {
+		args = append(args, "--sponsorblock-remove", j.SponsorBlockRemove)
 	}
 	if j.ForceOverwrites {
 		args = append(args, "--force-overwrites")

@@ -432,3 +432,85 @@ func TestDialogPlaylistOverrides(t *testing.T) {
 		}
 	}
 }
+
+// sponsorDetails is probeDetails with the sponsorblock_remove setting set to
+// categories; it also returns the runner the queued downloads run on.
+func sponsorDetails(t *testing.T, info *ytdlp.Info, categories string) (Model, *queue.Manager, *fakeRunner) {
+	t.Helper()
+	m, mgr, r := newTestModel(t, 2)
+	cfg := mgr.Config()
+	cfg.SponsorBlockRemove = categories
+	mgr.SetConfig(cfg)
+	m.prober = &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/in": info}}
+	m = press(t, m, "n")
+	m.dialog.input.SetValue("https://x.test/in")
+	m, res := submit(t, m)
+	if m = update(t, m, res); m.dialog.step != stepDetails {
+		t.Fatalf("step = %d, err = %v", m.dialog.step, m.dialog.err)
+	}
+	return m, mgr, r
+}
+
+func TestDialogSponsorBlockToggle(t *testing.T) {
+	video := &ytdlp.Info{Title: "V", URL: "v"}
+	tests := []struct {
+		name    string
+		setting string
+		toggle  bool // press space on the toggle before queueing
+		shown   bool
+		want    string // the job's SponsorBlockRemove
+	}{
+		{"hidden without the setting", "", false, false, ""},
+		{"on by default", "sponsor,intro", false, true, "sponsor,intro"},
+		{"turned off", "sponsor,intro", true, true, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _, r := sponsorDetails(t, video, tt.setting)
+			last := m.dialog.fields()[len(m.dialog.fields())-1]
+			if shown := last == focusSponsorBlock; shown != tt.shown {
+				t.Fatalf("toggle shown = %v, want %v", shown, tt.shown)
+			}
+			if tt.shown && !m.dialog.sponsorBlock {
+				t.Error("toggle defaults to off, want on")
+			}
+			if tt.toggle {
+				m = shiftTab(t, m)
+				m = press(t, m, "space")
+			}
+			m = press(t, m, "enter")
+			if m.dialog != nil {
+				t.Fatalf("dialog still open: err = %v", m.dialog.err)
+			}
+			if got := r.job(t, "v").SponsorBlockRemove; got != tt.want {
+				t.Errorf("job SponsorBlockRemove = %q, want %q", got, tt.want)
+			}
+			it, _ := m.selected()
+			if wantOverride := tt.toggle; (it.SponsorBlock != nil) != wantOverride {
+				t.Errorf("item SponsorBlock = %v, want an override only when turned off", it.SponsorBlock)
+			}
+		})
+	}
+}
+
+func TestDialogSponsorBlockPlaylist(t *testing.T) {
+	list := &ytdlp.Info{Title: "List", IsPlaylist: true, Entries: []ytdlp.Entry{
+		{Title: "One", URL: "one"},
+		{Title: "Two", URL: "two"},
+	}}
+	m, _, r := sponsorDetails(t, list, "sponsor")
+	want := []int{focusResolution, focusTemplate, focusSubtitles, focusSponsorBlock, focusFormat}
+	if got := focusOrder(t, m, len(want)); !slices.Equal(got, want) {
+		t.Errorf("tab order = %v, want %v", got, want)
+	}
+	m = shiftTab(t, m)
+	m = press(t, m, "h", "enter")
+	if m.dialog != nil {
+		t.Fatalf("dialog still open: err = %v", m.dialog.err)
+	}
+	for _, u := range []string{"one", "two"} {
+		if got := r.job(t, u).SponsorBlockRemove; got != "" {
+			t.Errorf("%s: job SponsorBlockRemove = %q, want nothing", u, got)
+		}
+	}
+}
