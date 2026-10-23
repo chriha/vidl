@@ -15,7 +15,7 @@ type keyMap struct {
 	Mark, MarkAll            key.Binding
 	ClearMarks               key.Binding
 	StatusFilter             key.Binding
-	Open, Reveal             key.Binding
+	Open, Reveal, Browse     key.Binding
 	ClearHistory             key.Binding
 	Edit, Toggle             key.Binding
 	Decrease, Increase       key.Binding
@@ -36,7 +36,7 @@ func newKeyMap() keyMap {
 		Tab2:         key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "finished")),
 		Tab3:         key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "settings")),
 		Start:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "start")),
-		Pause:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pause")),
+		Pause:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pause/requeue")),
 		Cancel:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "cancel")),
 		Retry:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "retry")),
 		Remove:       key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "remove")),
@@ -53,6 +53,7 @@ func newKeyMap() keyMap {
 		StatusFilter: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter status")),
 		Open:         key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open file")),
 		Reveal:       key.NewBinding(key.WithKeys("O"), key.WithHelp("O", "show in folder")),
+		Browse:       key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "open in browser")),
 		ClearHistory: key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "clear history")),
 		Edit:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit")),
 		Toggle:       key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
@@ -111,9 +112,9 @@ func (k tabKeys) escKeys() []key.Binding {
 func (k tabKeys) ShortHelp() []key.Binding {
 	switch k.tab {
 	case tabDownloads:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Cancel, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Cancel, k.Browse, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
 	case tabFinished:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Open, k.Reveal, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Open, k.Reveal, k.Browse, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
 	case tabSettings:
 		return []key.Binding{k.Up, k.Down, k.Edit, k.Decrease, k.Increase, k.NextTab, k.Help, k.Quit}
 	}
@@ -126,9 +127,9 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 	general := []key.Binding{k.New, k.Help, k.Quit}
 	switch k.tab {
 	case tabDownloads:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Cancel, k.Retry}, {k.Browse, k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.redownloadKey(), k.Remove, k.ClearHistory}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.Browse, k.redownloadKey(), k.Remove, k.ClearHistory}, tabs, general}
 	case tabSettings:
 		return [][]key.Binding{{k.Up, k.Down, k.Top, k.Bottom}, {k.Edit, k.Toggle, k.Decrease, k.Increase}, {k.NextTab, k.PrevTab, k.Tab1, k.Tab2, k.Tab3}, general}
 	}

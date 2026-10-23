@@ -23,8 +23,10 @@ downloads resume where they stopped.
 - **Per-download progress**: percentage, speed and ETA, combined across the
   separate video and audio streams yt-dlp fetches before merging.
 - **Pause, resume, cancel and retry.** Pausing keeps partial files so the
-  download resumes; cancelling deletes them. `R` on a finished download
-  downloads it again and replaces the file.
+  download resumes; `p` on a paused download puts it back in the queue to
+  wait for a free slot, while `s` resumes it at once. Cancelling deletes
+  partial files. `R` on a finished download downloads it again and
+  replaces the file.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads: open a file or show it in
   its folder, and clear the history.
@@ -35,6 +37,8 @@ downloads resume where they stopped.
 - **Detail panel** for any download: source, format, progress per stream,
   timestamps, output and partial files, errors, and yt-dlp's latest output
   for running or failed downloads.
+- **Desktop notifications** when a download finishes or fails. Downloads
+  ending within about two seconds of each other share one notification.
 - **Persistence**: queue and history are saved on every change; downloads
   running when you quit are resumed on the next start.
 - **Output formats**: mp4, mkv, webm (video) and mp3, m4a, opus (audio only),
@@ -185,6 +189,10 @@ shows it in Finder (macOS), selects it in Explorer (Windows) or opens its
 folder (Linux). Removing downloads
 from the history never deletes their files.
 
+`b` opens the selected download's source URL in the default browser, on the
+Downloads and Finished tabs and for downloads in any state. Only `http` and
+`https` URLs are opened, and marks are ignored.
+
 The line above the help shows the total download speed and how many downloads
 are running, queued, paused, failed or cancelled. Short messages and errors
 appear in the bottom right corner for a few seconds. While downloading, the
@@ -208,7 +216,7 @@ automatically the next time you start vidl.
 | `shift+tab` / `h`     | Previous tab                                        |
 | `1` `2` `3`           | Go to Downloads / Finished / Settings               |
 | `s`                   | Start or resume; retries failed or cancelled        |
-| `p`                   | Pause                                               |
+| `p`                   | Pause, or put a paused download back in the queue   |
 | `c`                   | Cancel (deletes partial files)                      |
 | `R`                   | Retry failed or cancelled, or re-download finished  |
 | `u` / `d`             | Move queued download up / down                      |
@@ -221,6 +229,7 @@ automatically the next time you start vidl.
 | `f`                   | Cycle the status filter (Downloads tab)             |
 | `o`                   | Open the file (Finished tab)                        |
 | `O`                   | Show the file in its folder (Finished tab)          |
+| `b`                   | Open the source URL in the browser                  |
 | `X`                   | Clear finished history (asks for confirmation)      |
 | `n`                   | New download                                        |
 | `?`                   | Toggle full help                                    |
@@ -256,6 +265,7 @@ embed_thumbnail = false
 embed_metadata = true
 rate_limit = ""
 cookies_from_browser = ""
+notify = true
 ```
 
 | Key                    | Default                       | Description |
@@ -271,9 +281,19 @@ cookies_from_browser = ""
 | `embed_metadata`       | `true`                        | Write title, uploader, date, etc. into the file. |
 | `rate_limit`           | empty (unlimited)             | Maximum download rate per download, e.g. `500K` or `5M`. |
 | `cookies_from_browser` | empty (disabled)              | Use cookies from `brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari` or `vivaldi`, for private, members-only or age-restricted videos. |
+| `notify`               | `true`                        | Desktop notification when a download finishes or fails. |
 
 Changing settings affects downloads that start afterwards; running downloads
-keep the settings they started with.
+keep the settings they started with. `notify` applies at once.
+
+### Notifications
+
+vidl notifies through `osascript` on macOS, `notify-send` on Linux (in the
+`libnotify-bin` or `libnotify` package) and PowerShell's built-in toast API on Windows.
+If the notifier isn't installed, vidl says so once and doesn't try again
+until the next start. macOS may ask you to allow notifications for your
+terminal app the first time. Windows notifications are best-effort: they
+appear under PowerShell's name and are only tested by hand on macOS.
 
 ### Formats and resolutions
 
@@ -426,6 +446,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Status filter on the Downloads tab (`f`)
 - [x] Open files from the Finished tab on Windows
 - [x] Re-download finished videos (`R`)
+- [x] Desktop notifications for finished and failed downloads
 
 ## License
 

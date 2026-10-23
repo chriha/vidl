@@ -62,6 +62,16 @@ func (r Runner) Probe(ctx context.Context, url, cookiesFromBrowser string) (*Inf
 		args = append(args, "--cookies-from-browser", cookiesFromBrowser)
 	}
 	args = append(args, "--", url)
+	out, err := r.output(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInfo(out)
+}
+
+// output runs yt-dlp with args and returns its stdout. On failure the error
+// is the context's error or yt-dlp's last ERROR line, when there is one.
+func (r Runner) output(ctx context.Context, args []string) ([]byte, error) {
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, r.bin(), args...)
 	cmd.Stderr = &stderr
@@ -75,7 +85,7 @@ func (r Runner) Probe(ctx context.Context, url, cookiesFromBrowser string) (*Inf
 		}
 		return nil, err
 	}
-	return ParseInfo(out)
+	return out, nil
 }
 
 // ParseInfo parses the output of `yt-dlp -J --flat-playlist`.

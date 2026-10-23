@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/chriha/vidl/internal/config"
+	"github.com/chriha/vidl/internal/notify"
 	"github.com/chriha/vidl/internal/queue"
 	"github.com/chriha/vidl/internal/ui"
 	"github.com/chriha/vidl/internal/ytdlp"
@@ -88,7 +89,7 @@ func run(urls []string) error {
 	}
 	mgr.Add(reqs...)
 
-	_, runErr := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version)).Run()
+	_, runErr := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version).WithNotifier(notify.System{})).Run()
 	closeErr := mgr.Close()
 	return errors.Join(runErr, closeErr)
 }
