@@ -7,7 +7,10 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-const toastDuration = 4 * time.Second
+const (
+	toastDuration     = 4 * time.Second
+	longToastDuration = 15 * time.Second // for messages that take time to read
+)
 
 var (
 	toastStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("10")).Padding(0, 1)
@@ -19,6 +22,7 @@ type toast struct {
 	text string
 	err  error // the reported error; nil for notices
 	seq  int   // id of the timer that hides it
+	long bool  // stays visible for longToastDuration
 }
 
 // toastExpiredMsg hides the toast with the same seq.
@@ -41,10 +45,15 @@ func (m *Model) notice(text string) {
 	m.toast = toast{text: text, seq: m.toast.seq + 1}
 }
 
-// expireToast hides the toast with the given seq after toastDuration, unless
-// a newer one replaced it by then.
-func expireToast(seq int) tea.Cmd {
-	return tea.Tick(toastDuration, func(time.Time) tea.Msg { return toastExpiredMsg{seq} })
+// longNotice shows an informational toast that stays visible longer.
+func (m *Model) longNotice(text string) {
+	m.toast = toast{text: text, seq: m.toast.seq + 1, long: true}
+}
+
+// expireToast hides the toast with the given seq after d, unless a newer one
+// replaced it by then.
+func expireToast(seq int, d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return toastExpiredMsg{seq} })
 }
 
 func (m Model) toastView() string {
