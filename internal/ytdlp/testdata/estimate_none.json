@@ -1,0 +1,8 @@
+{
+ "_type": "video",
+ "id": "ghi789",
+ "title": "Live stream",
+ "uploader": "Uploader",
+ "extractor_key": "Twitch",
+ "format_id": "source"
+}

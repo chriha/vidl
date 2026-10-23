@@ -1,0 +1,14 @@
+{
+ "_type": "video",
+ "id": "jkl012",
+ "title": "Merged, audio size unknown",
+ "uploader": "Uploader",
+ "extractor_key": "Youtube",
+ "duration": 300,
+ "format_id": "137+251",
+ "filesize_approx": 80000000,
+ "requested_formats": [
+  {"format_id": "137", "ext": "mp4", "vcodec": "avc1.640028", "acodec": "none", "filesize": 75000000},
+  {"format_id": "251", "ext": "webm", "vcodec": "none", "acodec": "opus"}
+ ]
+}
