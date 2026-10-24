@@ -84,6 +84,10 @@ type Manager struct {
 	estStop    context.CancelFunc
 	estimating int             // estimates running
 	estTried   map[string]bool // ids estimated (or being estimated) this session
+
+	// Clock of the wait timer, replaced by tests.
+	now       func() time.Time
+	afterFunc func(time.Duration, func()) waitTimer
 }
 
 // New loads the persisted state and starts queued downloads. Downloads that
@@ -98,6 +102,8 @@ func New(cfg config.Config, runner Runner, store Store) (*Manager, error) {
 		changes:    make(chan struct{}, 1),
 		estTried:   map[string]bool{},
 		stopPaused: map[string]bool{},
+		now:        time.Now,
+		afterFunc:  func(d time.Duration, f func()) waitTimer { return time.AfterFunc(d, f) },
 	}
 	m.estCtx, m.estStop = context.WithCancel(context.Background())
 	for _, it := range st.Queue {
