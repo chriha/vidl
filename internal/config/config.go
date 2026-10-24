@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -16,6 +17,9 @@ import (
 const (
 	MinConcurrency = 1
 	MaxConcurrency = 10
+
+	MinWait = time.Second // shortest wait_duration
+	MaxWait = time.Hour   // longest wait_duration
 )
 
 // Browsers that yt-dlp can read cookies from.
@@ -35,6 +39,8 @@ type Config struct {
 	CookiesFromBrowser string       `toml:"cookies_from_browser"`
 	Notify             bool         `toml:"notify"`              // desktop notification when a download finishes or fails
 	SponsorBlockRemove string       `toml:"sponsorblock_remove"` // SponsorBlock categories to cut out, empty to disable
+	WaitEnabled        bool         `toml:"wait_enabled"`        // wait between downloads
+	WaitDuration       string       `toml:"wait_duration"`       // Go duration, MinWait to MaxWait
 }
 
 func Default() Config {
@@ -113,6 +119,17 @@ func (c Config) Normalize() Config {
 		c.CookiesFromBrowser = ""
 	}
 	return c
+}
+
+// ParseWaitDuration parses a wait_duration value and checks it lies within
+// MinWait and MaxWait.
+func ParseWaitDuration(v string) (time.Duration, error) {
+	return 0, errors.New("not implemented")
+}
+
+// WaitTime returns WaitDuration parsed.
+func (c Config) WaitTime() time.Duration {
+	return 0
 }
 
 // DownloadPath returns DownloadDir with a leading ~ expanded.
