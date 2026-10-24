@@ -9,6 +9,7 @@ type keyMap struct {
 	Tab1, Tab2, Tab3         key.Binding
 	Start, Pause, Cancel     key.Binding
 	Hold, StopQueue          key.Binding
+	WaitTimer                key.Binding
 	Retry, Remove, New       key.Binding
 	Detail, Close            key.Binding
 	Why, CloseError          key.Binding
@@ -41,6 +42,7 @@ func newKeyMap() keyMap {
 		Pause:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pause/requeue")),
 		Hold:         key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "hold queue")),
 		StopQueue:    key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "stop/start queue")),
+		WaitTimer:    key.NewBinding(key.WithKeys("W"), key.WithHelp("W", "wait timer")),
 		Cancel:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "cancel")),
 		Retry:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "retry")),
 		Remove:       key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "remove")),
