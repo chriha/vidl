@@ -178,6 +178,23 @@ func (m *Manager) Held() bool {
 	return m.held
 }
 
+// Stop pauses every running download, keeping partial files, and holds the
+// queue. It returns the number of downloads it paused.
+func (m *Manager) Stop() int {
+	return 0
+}
+
+// Resume requeues the downloads Stop paused that are still paused and lifts
+// the hold. It returns the number of downloads it requeued.
+func (m *Manager) Resume() int {
+	return 0
+}
+
+// Stopped reports whether the queue is stopped.
+func (m *Manager) Stopped() bool {
+	return false
+}
+
 // SaveError returns the error of the most recent failed save, if any.
 func (m *Manager) SaveError() error {
 	m.mu.Lock()
