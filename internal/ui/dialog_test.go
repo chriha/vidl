@@ -302,15 +302,15 @@ func shiftTab(t *testing.T, m Model) Model {
 func TestDialogFieldNavigation(t *testing.T) {
 	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V"}}}
 	m, _ := probeDetails(t, p, "https://x.test/v")
-	want := []int{focusResolution, focusClipStart, focusClipEnd, focusTemplate, focusSubtitles, focusFormat}
+	want := []int{focusResolution, focusClipStart, focusClipEnd, focusTemplate, focusSubtitles, focusStatus, focusFormat}
 	if got := focusOrder(t, m, len(want)); !slices.Equal(got, want) {
 		t.Errorf("tab order = %v, want %v", got, want)
 	}
-	if m = shiftTab(t, m); m.dialog.focus != focusSubtitles {
-		t.Errorf("shift+tab from the type: focus = %d, want subtitles", m.dialog.focus)
+	if m = shiftTab(t, m); m.dialog.focus != focusStatus {
+		t.Errorf("shift+tab from the type: focus = %d, want status", m.dialog.focus)
 	}
-	if m = press(t, m, "k"); m.dialog.focus != focusTemplate {
-		t.Errorf("k from subtitles: focus = %d, want template", m.dialog.focus)
+	if m = press(t, m, "k", "k"); m.dialog.focus != focusTemplate {
+		t.Errorf("k twice from status: focus = %d, want template", m.dialog.focus)
 	}
 	// In a text field, letters are typed instead of moving the focus.
 	m.dialog.template.SetValue("")
@@ -360,7 +360,7 @@ func TestDialogUnchangedFieldsFollowSettings(t *testing.T) {
 			m, _ := probeDetails(t, p, "https://x.test/v")
 			edit(m.dialog)
 			if name == "toggled back" {
-				m = shiftTab(t, m)
+				m = shiftTab(t, shiftTab(t, m)) // subtitles
 				m = press(t, m, "space", "space")
 			}
 			m = press(t, m, "enter")
@@ -419,7 +419,7 @@ func TestDialogPlaylistOverrides(t *testing.T) {
 	}}
 	m, mgr := probeDetails(t, p, "https://x.test/pl")
 	m = press(t, m, "enter")
-	want := []int{focusResolution, focusTemplate, focusSubtitles, focusFormat}
+	want := []int{focusResolution, focusTemplate, focusSubtitles, focusStatus, focusFormat}
 	if got := focusOrder(t, m, len(want)); !slices.Equal(got, want) {
 		t.Errorf("tab order = %v, want %v (no clip fields)", got, want)
 	}
@@ -476,15 +476,14 @@ func TestDialogSponsorBlockToggle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m, _, r := sponsorDetails(t, video, tt.setting)
-			last := m.dialog.fields()[len(m.dialog.fields())-1]
-			if shown := last == focusSponsorBlock; shown != tt.shown {
+			if shown := slices.Contains(m.dialog.fields(), focusSponsorBlock); shown != tt.shown {
 				t.Fatalf("toggle shown = %v, want %v", shown, tt.shown)
 			}
 			if tt.shown && !m.dialog.sponsorBlock {
 				t.Error("toggle defaults to off, want on")
 			}
 			if tt.toggle {
-				m = shiftTab(t, m)
+				m = shiftTab(t, shiftTab(t, m)) // the toggle, before the status
 				m = press(t, m, "space")
 			}
 			m = press(t, m, "enter")
@@ -508,11 +507,11 @@ func TestDialogSponsorBlockPlaylist(t *testing.T) {
 		{Title: "Two", URL: "two"},
 	}}
 	m, _, r := sponsorDetails(t, list, "sponsor")
-	want := []int{focusResolution, focusTemplate, focusSubtitles, focusSponsorBlock, focusFormat}
+	want := []int{focusResolution, focusTemplate, focusSubtitles, focusSponsorBlock, focusStatus, focusFormat}
 	if got := focusOrder(t, m, len(want)); !slices.Equal(got, want) {
 		t.Errorf("tab order = %v, want %v", got, want)
 	}
-	m = shiftTab(t, m)
+	m = shiftTab(t, shiftTab(t, m))
 	m = press(t, m, "h", "enter")
 	if m.dialog != nil {
 		t.Fatalf("dialog still open: err = %v", m.dialog.err)
@@ -716,5 +715,130 @@ func TestDialogEntriesFitShortTerminal(t *testing.T) {
 	}
 	if !strings.Contains(view, "↑") {
 		t.Errorf("no ↑ more marker at the end of the list:\n%s", view)
+	}
+}
+
+// itemStatus waits until the download id has status want, failing with the
+// status it has instead.
+func itemStatus(t *testing.T, mgr *queue.Manager, id string, want queue.Status) {
+	t.Helper()
+	waitFor(t, "status "+want.String(), func() bool { it, _ := mgr.Get(id); return it.Status == want })
+}
+
+func TestDialogStatusSingleVideo(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V", URL: "https://x.test/v"}}}
+	tests := []struct {
+		name    string
+		running bool     // the only slot is taken by another download
+		held    bool     // the queue is held
+		keys    []string // pressed on the status field
+		want    queue.Status
+	}{
+		{"queued by default", true, false, nil, queue.Queued},
+		{"queued starts when a slot is free", false, false, nil, queue.Downloading},
+		{"paused", true, false, []string{"l"}, queue.Paused},
+		{"paused with a free slot", false, false, []string{"space"}, queue.Paused},
+		{"start now past the limit", true, false, []string{"l", "l"}, queue.Downloading},
+		{"start now while held", false, true, []string{"h"}, queue.Downloading},
+		{"wraps back to queued", true, false, []string{"l", "l", "l"}, queue.Queued},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var urls []string
+			if tt.running {
+				urls = []string{"a"}
+			}
+			m, mgr := newDialogModel(t, p, urls...)
+			mgr.SetHeld(tt.held)
+			m.dialog.input.SetValue("https://x.test/v")
+			m, res := submit(t, m)
+			m = update(t, m, res)
+			if m = shiftTab(t, m); m.dialog.focus != focusStatus {
+				t.Fatalf("focus = %d, want status", m.dialog.focus)
+			}
+			m = press(t, m, append(tt.keys, "enter")...)
+			if m.dialog != nil {
+				t.Fatalf("dialog still open: err = %v", m.dialog.err)
+			}
+			it, _ := m.selected()
+			if it.URL != "https://x.test/v" {
+				t.Fatalf("selected %q, want the new download", it.URL)
+			}
+			itemStatus(t, mgr, it.ID, tt.want)
+		})
+	}
+}
+
+func TestDialogStatusPlaylist(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{
+		"https://x.test/pl": {Title: "List", IsPlaylist: true, Entries: []ytdlp.Entry{
+			{Title: "One", URL: "https://x.test/1"},
+			{Title: "Two", URL: "https://x.test/2"},
+		}},
+	}}
+	tests := []struct {
+		name string
+		keys []string
+		want queue.Status
+	}{
+		{"queued by default", nil, queue.Queued},
+		{"paused", []string{"l"}, queue.Paused},
+		// Only Queued and Paused are offered: no Start now in between.
+		{"two choices", []string{"l", "l", "l"}, queue.Paused},
+		{"backwards", []string{"h"}, queue.Paused},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, mgr := newDialogModel(t, p, "a") // a takes the only slot
+			m.dialog.input.SetValue("https://x.test/pl")
+			m, res := submit(t, m)
+			m = update(t, m, res)
+			m = press(t, m, "enter") // past the checklist
+			m = shiftTab(t, m)
+			m = press(t, m, append(tt.keys, "enter")...)
+			if m.dialog != nil {
+				t.Fatalf("dialog still open: err = %v", m.dialog.err)
+			}
+			q, _ := mgr.Snapshot()
+			if len(q) != 3 {
+				t.Fatalf("queue = %d items, want 3", len(q))
+			}
+			for _, it := range q[1:] {
+				itemStatus(t, mgr, it.ID, tt.want)
+			}
+		})
+	}
+}
+
+func TestDialogStatusBatch(t *testing.T) {
+	tests := []struct {
+		name string
+		keys []string
+		want queue.Status
+	}{
+		{"queued by default", nil, queue.Queued},
+		{"paused", []string{"l"}, queue.Paused},
+		{"space", []string{"space"}, queue.Paused},
+		{"two choices", []string{"h", "h"}, queue.Queued},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, mgr := newDialogModel(t, &fakeProber{}, "a") // a takes the only slot
+			m = update(t, m, tea.PasteMsg{Content: "https://a.test/1 https://a.test/2"})
+			if m.dialog.step != stepBatch {
+				t.Fatalf("step = %d, want batch", m.dialog.step)
+			}
+			m = press(t, m, append(tt.keys, "enter")...)
+			if m.dialog != nil {
+				t.Fatal("dialog still open")
+			}
+			q, _ := mgr.Snapshot()
+			if len(q) != 3 {
+				t.Fatalf("queue = %d items, want 3", len(q))
+			}
+			for _, it := range q[1:] {
+				itemStatus(t, mgr, it.ID, tt.want)
+			}
+		})
 	}
 }

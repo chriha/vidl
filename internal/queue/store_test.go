@@ -74,6 +74,24 @@ func fixtureState() State {
 	}
 }
 
+func TestAppendQueuedKeepsPausedRequest(t *testing.T) {
+	s := tempStore(t)
+	ids, err := s.AppendQueued(appendCfg(), NewItem{URL: "https://example.com/p", Paused: true}, NewItem{URL: "https://example.com/q"})
+	if err != nil {
+		t.Fatalf("AppendQueued: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Queue) != 2 || st.Queue[0].ID != ids[0] || st.Queue[1].ID != ids[1] {
+		t.Fatalf("queue = %+v, want the two new items", st.Queue)
+	}
+	if st.Queue[0].Status != Paused || st.Queue[1].Status != Queued {
+		t.Errorf("statuses = %v, %v; want paused, queued", st.Queue[0].Status, st.Queue[1].Status)
+	}
+}
+
 func appendCfg() config.Config {
 	cfg := config.Default()
 	cfg.DefaultFormat = ytdlp.MKV

@@ -44,7 +44,17 @@ const (
 	focusTemplate
 	focusSubtitles
 	focusSponsorBlock // only while the sponsorblock_remove setting is set
+	focusStatus
 )
+
+// Statuses new downloads can be added with, in selector order.
+const (
+	addQueued = iota
+	addPaused
+	addStartNow // single videos only
+)
+
+var addStatusLabels = []string{"Queued", "Paused", "Start now"}
 
 // playlistPreview is the number of pasted URLs listed in the batch step.
 const playlistPreview = 5
@@ -102,6 +112,10 @@ type newDialog struct {
 	// is only offered when sponsorBlockShown.
 	sponsorBlock      bool
 	sponsorBlockShown bool
+
+	// status is how the downloads are added (addQueued…), in the details and
+	// batch steps.
+	status int
 
 	// Playlist checklist: which entries are checked, the cursor and the
 	// first visible row.
@@ -181,7 +195,7 @@ func (m Model) handleDialogMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if urls := extractURLs(msg.Content); len(urls) > 1 {
-			d.step, d.batch, d.err = stepBatch, urls, nil
+			d.showBatch(urls)
 			return m, nil
 		}
 		d.input, cmd = d.input.Update(msg)
@@ -255,12 +269,16 @@ func (m Model) handleDialogKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc":
 			d.step, d.batch = stepInput, nil
+		case "h", "left":
+			d.changeStatus(-1)
+		case "l", "right", "space":
+			d.changeStatus(1)
 		case "enter":
 			reqs := make([]queue.NewItem, len(d.batch))
 			for i, u := range d.batch {
 				reqs[i] = queue.NewItem{URL: u}
 			}
-			m.queueAndClose(reqs)
+			m.queueAndClose(reqs, d.status)
 		}
 	}
 	return m, nil
@@ -299,7 +317,7 @@ func (m Model) handleDetailsKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, d.moveFocus(-1)
 	case k == "h" || k == "left":
 		d.change(-1)
-	case k == "l" || k == "right" || (k == "space" && (d.focus == focusSubtitles || d.focus == focusSponsorBlock)):
+	case k == "l" || k == "right" || (k == "space" && (d.focus == focusSubtitles || d.focus == focusSponsorBlock || d.focus == focusStatus)):
 		d.change(1)
 	}
 	return m, nil
@@ -378,7 +396,7 @@ func (m Model) submitURL() (Model, tea.Cmd) {
 	d := m.dialog
 	value := strings.TrimSpace(d.input.Value())
 	if urls := extractURLs(value); len(urls) > 1 {
-		d.step, d.batch, d.err = stepBatch, urls, nil
+		d.showBatch(urls)
 		return m, nil
 	}
 	if value == "" {
@@ -397,9 +415,14 @@ func (m Model) submitURL() (Model, tea.Cmd) {
 	return m, tea.Batch(d.spinner.Tick, probe)
 }
 
+// showBatch asks to add the pasted urls, queued by default.
+func (d *newDialog) showBatch(urls []string) {
+	d.step, d.batch, d.err, d.status = stepBatch, urls, nil, addQueued
+}
+
 // showDetails switches to the details step with the config's defaults.
 func (d *newDialog) showDetails(info *ytdlp.Info, cfg config.Config) {
-	d.step, d.info, d.focus = stepDetails, info, focusFormat
+	d.step, d.info, d.focus, d.status = stepDetails, info, focusFormat, addQueued
 	d.format = max(slices.Index(ytdlp.Formats, cfg.DefaultFormat), 0)
 	d.resolutions = availableResolutions(info.Heights)
 	d.res = defaultResolution(d.resolutions, cfg.DefaultResolution)
@@ -447,7 +470,8 @@ func (d *newDialog) audio() bool {
 }
 
 // fields are the details step's fields in tab order: no resolution for audio,
-// no clip for playlists and no SponsorBlock toggle without the setting.
+// no clip for playlists and no SponsorBlock toggle without the setting; the
+// status comes last.
 func (d *newDialog) fields() []int {
 	f := []int{focusFormat}
 	if !d.audio() {
@@ -460,7 +484,7 @@ func (d *newDialog) fields() []int {
 	if d.sponsorBlockShown {
 		f = append(f, focusSponsorBlock)
 	}
-	return f
+	return append(f, focusStatus)
 }
 
 // moveFocus focuses the next (delta 1) or previous (-1) field, wrapping around.
@@ -506,11 +530,26 @@ func (d *newDialog) change(delta int) {
 		d.subtitles = !d.subtitles
 	case focusSponsorBlock:
 		d.sponsorBlock = !d.sponsorBlock
+	case focusStatus:
+		d.changeStatus(delta)
 	}
 }
 
+// statusLabels are the statuses offered: Start now only for a single video.
+func (d *newDialog) statusLabels() []string {
+	if d.step == stepDetails && !d.info.IsPlaylist {
+		return addStatusLabels
+	}
+	return addStatusLabels[:addStartNow]
+}
+
+func (d *newDialog) changeStatus(delta int) {
+	n := len(d.statusLabels())
+	d.status = (d.status + delta + n) % n
+}
+
 // queueDetails queues the probed video, or the checked playlist entries, with the
-// chosen format, resolution and overrides. An invalid clip is shown as the
+// chosen format, resolution, overrides and status. An invalid clip is shown as the
 // dialog's error instead.
 func (m *Model) queueDetails() {
 	d := m.dialog
@@ -546,7 +585,7 @@ func (m *Model) queueDetails() {
 			Template:     template,
 			Subtitles:    subtitles,
 			SponsorBlock: sponsorBlock,
-		}})
+		}}, d.status)
 		return
 	}
 	var reqs []queue.NewItem
@@ -559,17 +598,24 @@ func (m *Model) queueDetails() {
 			Template: template, Subtitles: subtitles, SponsorBlock: sponsorBlock,
 		})
 	}
-	m.queueAndClose(reqs)
+	m.queueAndClose(reqs, d.status)
 }
 
-// queueAndClose adds reqs, closes the dialog and puts the Downloads cursor on
-// the first new item.
-func (m *Model) queueAndClose(reqs []queue.NewItem) {
+// queueAndClose adds reqs with status (addQueued…), closes the dialog and puts
+// the Downloads cursor on the first new item. Start now starts the first one
+// right away, like s.
+func (m *Model) queueAndClose(reqs []queue.NewItem, status int) {
+	for i := range reqs {
+		reqs[i].Paused = status == addPaused
+	}
 	ids := m.mgr.Add(reqs...)
 	m.closeDialog()
 	m.tab = tabDownloads
 	if len(ids) > 0 {
 		m.sel[tabDownloads] = ids[0]
+		if status == addStartNow {
+			m.report(m.mgr.Start(ids[0]))
+		}
 	}
 	m.refresh()
 }
@@ -622,7 +668,9 @@ func (m Model) dialogView() string {
 			}
 			lines = append(lines, dimStyle.Render(ansi.Truncate(u, inner, "…")))
 		}
-		lines = append(lines, "", dimStyle.Render("enter add · esc back"))
+		lines = append(lines, "",
+			ansi.Truncate(selector("Status", d.statusLabels(), d.status, true, false), inner, "…"),
+			"", dimStyle.Render(ansi.Truncate("h/l/space status · enter add · esc back", inner, "…")))
 	}
 	return newDialogStyle.Width(w).Render(strings.Join(lines, "\n"))
 }
@@ -717,7 +765,9 @@ func (d *newDialog) detailsLines(w int) []string {
 		lines = append(lines,
 			ansi.Truncate(selector("Sponsors", []string{"keep", "remove"}, sponsorBlock, d.focus == focusSponsorBlock, false), w, "…"))
 	}
-	lines = append(lines, "")
+	lines = append(lines,
+		ansi.Truncate(selector("Status", d.statusLabels(), d.status, d.focus == focusStatus, false), w, "…"),
+		"")
 	if d.err != nil {
 		lines = append(lines, errorStyle.Width(w).MaxHeight(3).Render(d.err.Error()), "")
 	}

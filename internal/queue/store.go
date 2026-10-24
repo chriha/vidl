@@ -96,9 +96,10 @@ func (l *Lock) Release() error {
 
 // AppendQueued adds queued downloads to the file while no vidl is running:
 // it takes the lock, loads the file, appends and saves, keeping existing
-// items as they are. A missing format or resolution follows cfg. It fails
-// with ErrLocked while a vidl holds the lock. The ids are returned whenever
-// the items were saved, even if releasing the lock fails afterwards.
+// items as they are. Requests marked Paused are saved paused. A missing format
+// or resolution follows cfg. It fails with ErrLocked while a vidl holds the
+// lock. The ids are returned whenever the items were saved, even if releasing
+// the lock fails afterwards.
 func (s FileStore) AppendQueued(cfg config.Config, reqs ...NewItem) (ids []string, err error) {
 	l, err := s.Lock()
 	if err != nil {

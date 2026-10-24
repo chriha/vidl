@@ -52,6 +52,10 @@ type NewItem struct {
 
 	// SponsorBlock false skips the sponsorblock_remove setting; nil follows it.
 	SponsorBlock *bool
+
+	// Paused adds the item paused: it waits for Start or Requeue instead of
+	// starting once a slot is free.
+	Paused bool
 }
 
 // Manager owns the download queue and history. Queued items start
@@ -257,6 +261,7 @@ func (m *Manager) SaveError() error {
 }
 
 // Add queues new downloads at the end of the queue and returns their ids.
+// Downloads requested as paused wait for Start or Requeue.
 func (m *Manager) Add(reqs ...NewItem) []string {
 	m.mu.Lock()
 	defer m.notify()
@@ -272,8 +277,8 @@ func (m *Manager) Add(reqs ...NewItem) []string {
 	return ids
 }
 
-// newItem builds a queued item for r; a missing format or resolution
-// follows cfg.
+// newItem builds a queued item for r, or a paused one when r asks for it; a
+// missing format or resolution follows cfg.
 func newItem(r NewItem, cfg config.Config) *Item {
 	it := &Item{
 		ID:         newID(),
@@ -295,6 +300,9 @@ func newItem(r NewItem, cfg config.Config) *Item {
 	}
 	if r.SponsorBlock != nil {
 		it.SponsorBlock = new(*r.SponsorBlock)
+	}
+	if r.Paused {
+		it.Status = Paused
 	}
 	if !it.Format.Valid() {
 		it.Format = cfg.DefaultFormat

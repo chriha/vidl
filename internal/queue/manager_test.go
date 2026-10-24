@@ -278,6 +278,22 @@ func TestAddUsesConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestAddPausedDoesNotAutoStart(t *testing.T) {
+	m, r := newManager(t, 2, &MemStore{})
+	ids := m.Add(NewItem{URL: "a", Paused: true}, NewItem{URL: "b"})
+	r.waitStarted(t, "b")
+	r.assertNoStart(t) // a slot is free, but a was added paused
+	if got := status(m, ids[0]); got != Paused {
+		t.Fatalf("a = %v, want paused", got)
+	}
+
+	if err := m.Requeue(ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	r.waitStarted(t, "a")
+	waitStatus(t, m, ids[0], Downloading)
+}
+
 func TestPauseAndResumeKeepsPartFiles(t *testing.T) {
 	m, r := newManager(t, 1, &MemStore{})
 	part := filepath.Join(t.TempDir(), "a.part")
