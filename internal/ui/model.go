@@ -315,6 +315,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		} else {
 			m.notice("Queue resumed")
 		}
+	case key.Matches(msg, k.StopQueue):
+		if m.tab == tabSettings {
+			break
+		}
+		if m.mgr.Stopped() {
+			m.notice("Queue started — " + plural(m.mgr.Resume(), "download") + " resumed")
+		} else {
+			m.notice("Queue stopped — " + plural(m.mgr.Stop(), "download") + " paused")
+		}
 	case key.Matches(msg, k.Cancel):
 		if !m.bulk(bulkCancel) {
 			m.act(m.mgr.Cancel)
@@ -561,7 +570,25 @@ func (m Model) tabBar() string {
 			tabs = append(tabs, label+" ")
 		}
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	bar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	badge := m.queueBadge()
+	if badge == "" {
+		return bar
+	}
+	gap := max(m.width-lipgloss.Width(bar)-lipgloss.Width(badge), 1)
+	return bar + strings.Repeat(" ", gap) + badge
+}
+
+// queueBadge marks a stopped or held queue in the tab bar.
+func (m Model) queueBadge() string {
+	style := lipgloss.NewStyle().Bold(true).Foreground(statusColors[queue.Paused]).Padding(0, 1)
+	switch {
+	case m.mgr.Stopped():
+		return style.Render("⏸ STOPPED")
+	case m.mgr.Held():
+		return style.Render("⏸ HELD")
+	}
+	return ""
 }
 
 // helpKeys is the key help for the current state.

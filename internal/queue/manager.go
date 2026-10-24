@@ -71,6 +71,11 @@ type Manager struct {
 	wg      sync.WaitGroup
 	changes chan struct{}
 
+	// Session only: Stop holds the queue and records the ids it paused,
+	// which Resume requeues.
+	stopped    bool
+	stopPaused map[string]bool
+
 	estCtx     context.Context
 	estStop    context.CancelFunc
 	estimating int             // estimates running
@@ -82,12 +87,13 @@ type Manager struct {
 func New(cfg config.Config, runner Runner, store Store) (*Manager, error) {
 	st, err := store.Load()
 	m := &Manager{
-		cfg:      cfg.Normalize(),
-		runner:   runner,
-		store:    store,
-		active:   map[string]context.CancelCauseFunc{},
-		changes:  make(chan struct{}, 1),
-		estTried: map[string]bool{},
+		cfg:        cfg.Normalize(),
+		runner:     runner,
+		store:      store,
+		active:     map[string]context.CancelCauseFunc{},
+		changes:    make(chan struct{}, 1),
+		estTried:   map[string]bool{},
+		stopPaused: map[string]bool{},
 	}
 	m.estCtx, m.estStop = context.WithCancel(context.Background())
 	for _, it := range st.Queue {
@@ -162,9 +168,13 @@ func (m *Manager) SetConfig(cfg config.Config) {
 
 // SetHeld sets the queue-wide hold. While held, nothing starts automatically
 // (running downloads finish; Start still starts an item); releasing it fills
-// the free slots. The hold is not persisted.
+// the free slots, and releasing a stopped queue works like Resume. The hold is
+// not persisted.
 func (m *Manager) SetHeld(held bool) {
 	m.mu.Lock()
+	if !held && m.stopped {
+		m.resumeLocked()
+	}
 	m.held = held
 	m.scheduleLocked()
 	m.mu.Unlock()
@@ -176,6 +186,67 @@ func (m *Manager) Held() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.held
+}
+
+// Stop pauses every running download, keeping partial files, and holds the
+// queue. It returns the number of downloads it paused.
+func (m *Manager) Stop() int {
+	m.mu.Lock()
+	m.stopped, m.held = true, true
+	n := 0
+	for _, it := range m.queue {
+		if it.Status == Downloading {
+			// The worker sets Paused once yt-dlp has exited.
+			m.active[it.ID](errPaused)
+			m.stopPaused[it.ID] = true
+			n++
+		}
+	}
+	m.mu.Unlock()
+	m.notify()
+	return n
+}
+
+// Resume requeues the downloads Stop paused that are still paused and lifts
+// the hold. It returns the number of downloads it requeued.
+func (m *Manager) Resume() int {
+	m.mu.Lock()
+	n := m.resumeLocked()
+	m.held = false
+	m.scheduleLocked()
+	m.saveLocked()
+	m.mu.Unlock()
+	m.notify()
+	return n
+}
+
+// resumeLocked requeues the stop-paused downloads and ends the stop. A download
+// whose pause is still in flight stays in the set and is requeued by its worker.
+func (m *Manager) resumeLocked() int {
+	m.stopped = false
+	n := 0
+	for _, it := range m.queue {
+		if !m.stopPaused[it.ID] {
+			continue
+		}
+		if it.Status == Downloading {
+			n++ // its worker requeues it
+			continue
+		}
+		if it.Status == Paused {
+			it.Status = Queued
+			n++
+		}
+		delete(m.stopPaused, it.ID)
+	}
+	return n
+}
+
+// Stopped reports whether the queue is stopped.
+func (m *Manager) Stopped() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.stopped
 }
 
 // SaveError returns the error of the most recent failed save, if any.
@@ -258,6 +329,7 @@ func (m *Manager) Start(id string) error {
 	if it.Status == Downloading || m.closed {
 		return nil
 	}
+	delete(m.stopPaused, id)
 	m.startLocked(it)
 	m.saveLocked()
 	return nil
@@ -303,6 +375,9 @@ func (m *Manager) stop(id string, cause error, status Status) error {
 		m.mu.Unlock()
 		return ErrNotFound
 	}
+	if status == Cancelled {
+		delete(m.stopPaused, id)
+	}
 	var cleanup []string
 	switch it.Status {
 	case Downloading:
@@ -332,6 +407,7 @@ func (m *Manager) Remove(id string) error {
 	} else if i := slices.IndexFunc(m.queue, byID(id)); i >= 0 {
 		it := m.queue[i]
 		m.queue = slices.Delete(m.queue, i, i+1)
+		delete(m.stopPaused, id)
 		if cancel, ok := m.active[id]; ok {
 			cancel(errRemoved)
 		} else {
@@ -621,6 +697,9 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, it *I
 		m.history = slices.Insert(m.history, 0, it)
 	case cause == errPaused:
 		it.Status = Paused
+		if m.stopPaused[it.ID] && !m.stopped { // resumed while pausing
+			it.Status = Queued
+		}
 	case cause == errShutdown:
 		it.Status = Queued
 	case cause == errCancelled:
@@ -630,6 +709,9 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, it *I
 	default:
 		it.Status = Failed
 		it.Error = err.Error()
+	}
+	if it.Status != Paused {
+		delete(m.stopPaused, it.ID)
 	}
 	m.scheduleLocked()
 	m.saveLocked()

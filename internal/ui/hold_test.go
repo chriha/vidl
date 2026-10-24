@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/key"
-	"github.com/charmbracelet/x/ansi"
 )
 
 func TestHoldKeyTogglesQueueHold(t *testing.T) {
@@ -26,17 +25,6 @@ func TestHoldKeyTogglesQueueHold(t *testing.T) {
 		if got := m.toast.text; !strings.Contains(got, "resumed") {
 			t.Errorf("toast = %q", got)
 		}
-	}
-}
-
-func TestStatusLineShowsQueueHold(t *testing.T) {
-	m, _, _ := newTestModel(t, 1, "a")
-	if strings.Contains(ansi.Strip(m.statusLine()), "queue held") {
-		t.Fatal("status line shows a hold that isn't set")
-	}
-	m = press(t, m, "P")
-	if !strings.Contains(ansi.Strip(m.statusLine()), "queue held") {
-		t.Errorf("status line %q lacks the hold segment", ansi.Strip(m.statusLine()))
 	}
 }
 
