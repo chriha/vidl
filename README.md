@@ -37,6 +37,12 @@ downloads resume where they stopped.
   queue; `S` again resumes only the downloads the stop paused, so ones you
   paused yourself stay paused. A `⏸ HELD` or `⏸ STOPPED` badge at the right
   of the tab bar shows either state. Both last for the session.
+- **Wait between downloads** with `W`: after a download ends (finished,
+  failed, paused, cancelled or removed), the next queued one starts only once
+  `wait_duration` (30s by default) has passed; each further end restarts the
+  countdown. `s` still starts a download at once. A `⏱ 30s` badge in the tab
+  bar shows the timer is on, and counts down while waiting (`⏱ 23s`,
+  `⏱ 1:45`); a hold or stop freezes the countdown. The setting is saved.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads: open a file or show it in
   its folder, and clear the history.
@@ -302,6 +308,7 @@ automatically the next time you start vidl.
 | `p`                   | Pause, or put a paused download back in the queue   |
 | `P`                   | Hold or resume the queue (running downloads finish) |
 | `S`                   | Stop the queue (pauses running downloads) or start  |
+| `W`                   | Turn the wait between downloads on or off (saved)   |
 | `c`                   | Cancel (deletes partial files)                      |
 | `R`                   | Retry failed or cancelled, or re-download finished  |
 | `u` / `d`             | Move queued download up / down                      |
@@ -574,6 +581,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Stop and start the whole queue (`S`), with a held/stopped badge
 - [x] Estimated size for downloads that haven't started
 - [x] Add downloads queued, paused or started right away from the dialog
+- [x] Wait a set time between downloads (`W`), with a countdown badge
 
 ## License
 

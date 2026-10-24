@@ -132,7 +132,7 @@ func (k tabKeys) ShortHelp() []key.Binding {
 	}
 	switch k.tab {
 	case tabDownloads:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.whyKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Hold, k.StopQueue, k.Cancel, k.Browse, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.whyKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Hold, k.StopQueue, k.WaitTimer, k.Cancel, k.Browse, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
 	case tabFinished:
 		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Open, k.Reveal, k.Browse, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
 	case tabSettings:
@@ -150,7 +150,7 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 	}
 	switch k.tab {
 	case tabDownloads:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.whyKey(), k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Hold, k.StopQueue, k.Cancel, k.Retry}, {k.Browse, k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.whyKey(), k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Hold, k.StopQueue, k.WaitTimer, k.Cancel, k.Retry}, {k.Browse, k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
 		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.Browse, k.redownloadKey(), k.Remove, k.ClearHistory}, tabs, general}
 	case tabSettings:

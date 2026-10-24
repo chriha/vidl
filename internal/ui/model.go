@@ -103,6 +103,8 @@ type Model struct {
 	ended             []queue.Item // finished or failed downloads awaiting a notification
 	notifyUnavailable bool         // the notifier binary is missing; stop trying
 
+	waitTicking bool // a waitTickMsg is pending
+
 	probeSeq  int                    // id of the latest probe request
 	clipboard func() (string, error) // reads the system clipboard
 }
@@ -183,6 +185,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd = tea.Batch(cmd, expireToast(next.toast.seq, d))
 	}
+	if !next.waitTicking && next.waitCounting() {
+		next.waitTicking = true
+		cmd = tea.Batch(cmd, waitTick())
+	}
 	if len(m.ended) == 0 && len(next.ended) > 0 {
 		cmd = tea.Batch(cmd, tea.Tick(notifyWindow, func(time.Time) tea.Msg { return notifyFlushMsg{} }))
 	}
@@ -218,6 +224,9 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case versionMsg:
 		m.handleVersion(msg)
+		return m, nil
+	case waitTickMsg:
+		m.waitTicking = false // Update schedules the next one while counting down
 		return m, nil
 	case notifyFlushMsg:
 		return m, m.flushNotifications()
@@ -323,6 +332,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.notice("Queue started — " + plural(m.mgr.Resume(), "download") + " resumed")
 		} else {
 			m.notice("Queue stopped — " + plural(m.mgr.Stop(), "download") + " paused")
+		}
+	case key.Matches(msg, k.WaitTimer):
+		if m.tab != tabSettings {
+			m.toggleWait()
 		}
 	case key.Matches(msg, k.Cancel):
 		if !m.bulk(bulkCancel) {
@@ -571,12 +584,12 @@ func (m Model) tabBar() string {
 		}
 	}
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
-	badge := m.queueBadge()
+	badge := m.queueBadge() + m.waitBadge()
 	if badge == "" {
 		return bar
 	}
 	gap := max(m.width-lipgloss.Width(bar)-lipgloss.Width(badge), 1)
-	return bar + strings.Repeat(" ", gap) + badge
+	return ansi.Truncate(bar+strings.Repeat(" ", gap)+badge, m.width, "…")
 }
 
 // queueBadge marks a stopped or held queue in the tab bar.
