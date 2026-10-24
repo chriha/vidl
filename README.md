@@ -495,10 +495,27 @@ If it reports `n challenge solving failed`, install or fix the runtime it
 names (see the [yt-dlp EJS wiki](https://github.com/yt-dlp/yt-dlp/wiki/EJS)).
 For example, Deno fails if `~/.npmrc` is a directory instead of a file.
 
-**Downloads fail with HTTP 403 or "Sign in to confirm".** Update yt-dlp
-(`yt-dlp -U` or `brew upgrade yt-dlp`). For private, members-only or
-age-restricted videos, set `cookies_from_browser` to a browser where you're
-logged in.
+**Downloads fail with HTTP 403.** Update yt-dlp (`yt-dlp -U` or
+`brew upgrade yt-dlp`). For private, members-only or age-restricted videos,
+set `cookies_from_browser` to a browser where you're logged in.
+
+**"Sign in to confirm you're not a bot".** YouTube flags the IP address or a
+request without a PO token. Without using cookies:
+
+- Turn off any VPN or switch networks; data-center and shared IPs get flagged
+  most.
+- Install a PO token provider such as
+  [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
+  (a local server plus a yt-dlp plugin in `~/.config/yt-dlp/plugins`).
+- Try other YouTube clients by adding this to `~/.config/yt-dlp/config`:
+
+  ```
+  --extractor-args "youtube:player_client=default,tv,web_safari"
+  ```
+
+yt-dlp still reads its own config file and plugins when vidl runs it, so
+these apply without changing vidl. See the
+[yt-dlp PO token guide](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide).
 
 **`[yt-dlp ffmpeg] not found on PATH`.** Install the missing tool (see
 [Requirements](#requirements)) and check `which yt-dlp ffmpeg`.
