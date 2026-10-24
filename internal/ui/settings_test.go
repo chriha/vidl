@@ -320,3 +320,63 @@ func TestSettingsRenderFits(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsWaitToggle(t *testing.T) {
+	m := settingsModel(t, "Wait between downloads")
+	if m.mgr.Config().WaitEnabled {
+		t.Fatal("wait timer on by default")
+	}
+	m = press(t, m, "space")
+	if !saved(t, m).WaitEnabled || !m.mgr.Config().WaitEnabled {
+		t.Error("space didn't enable")
+	}
+	m = press(t, m, "space")
+	if saved(t, m).WaitEnabled {
+		t.Error("space didn't disable")
+	}
+}
+
+func TestSettingsWaitDuration(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		invalid bool
+	}{
+		{input: "45s", want: "45s"},
+		{input: " 2m ", want: "2m"},
+		{input: "1m30s", want: "1m30s"},
+		{input: "1h", want: "1h"},
+		{input: "1s", want: "1s"},
+		{input: "0s", invalid: true},
+		{input: "2h", invalid: true},
+		{input: "abc", invalid: true},
+		{input: "30", invalid: true},
+		{input: "", invalid: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			m := settingsModel(t, "Wait duration")
+			m = press(t, m, "enter")
+			if m.settings.edit == nil {
+				t.Fatal("enter didn't open the editor")
+			}
+			m.settings.edit.SetValue(tt.input)
+			m = press(t, m, "enter")
+			if tt.invalid {
+				if m.settings.err == nil || m.settings.edit == nil {
+					t.Errorf("err = %v, editor open = %v; want error and open editor", m.settings.err, m.settings.edit != nil)
+				}
+				if got := m.mgr.Config().WaitDuration; got != "30s" {
+					t.Errorf("applied %q", got)
+				}
+				return
+			}
+			if m.settings.edit != nil {
+				t.Fatalf("editor still open: %v", m.settings.err)
+			}
+			if got := saved(t, m).WaitDuration; got != tt.want {
+				t.Errorf("saved %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
