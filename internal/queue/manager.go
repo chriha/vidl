@@ -84,6 +84,19 @@ type Manager struct {
 	estStop    context.CancelFunc
 	estimating int             // estimates running
 	estTried   map[string]bool // ids estimated (or being estimated) this session
+
+	// Wait timer: after a download ends, nothing starts automatically until
+	// the countdown expires. Running while waitTimer is set (until
+	// waitUntil), frozen with waitLeft otherwise.
+	waiting   bool
+	waitUntil time.Time
+	waitLeft  time.Duration
+	waitTimer waitTimer
+	waitGen   int // bumped on every stop, so stale timer callbacks do nothing
+
+	// Clock of the wait timer, replaced by tests.
+	now       func() time.Time
+	afterFunc func(time.Duration, func()) waitTimer
 }
 
 // New loads the persisted state and starts queued downloads. Downloads that
@@ -98,6 +111,8 @@ func New(cfg config.Config, runner Runner, store Store) (*Manager, error) {
 		changes:    make(chan struct{}, 1),
 		estTried:   map[string]bool{},
 		stopPaused: map[string]bool{},
+		now:        time.Now,
+		afterFunc:  func(d time.Duration, f func()) waitTimer { return time.AfterFunc(d, f) },
 	}
 	m.estCtx, m.estStop = context.WithCancel(context.Background())
 	for _, it := range st.Queue {
@@ -161,25 +176,34 @@ func (m *Manager) Config() config.Config {
 }
 
 // SetConfig updates the settings. Running downloads keep their settings; a
-// lower concurrency takes effect as running downloads finish.
+// lower concurrency takes effect as running downloads finish. Disabling the
+// wait timer drops a running countdown; a new duration applies to the next.
 func (m *Manager) SetConfig(cfg config.Config) {
 	m.mu.Lock()
 	m.cfg = cfg.Normalize()
+	if !m.cfg.WaitEnabled {
+		m.dropWaitLocked()
+	}
 	m.scheduleLocked()
 	m.mu.Unlock()
 	m.notify()
 }
 
 // SetHeld sets the queue-wide hold. While held, nothing starts automatically
-// (running downloads finish; Start still starts an item); releasing it fills
-// the free slots, and releasing a stopped queue works like Resume. The hold is
-// not persisted.
+// (running downloads finish; Start still starts an item) and the wait
+// countdown is frozen; releasing it fills the free slots, and releasing a
+// stopped queue works like Resume. The hold is not persisted.
 func (m *Manager) SetHeld(held bool) {
 	m.mu.Lock()
 	if !held && m.stopped {
 		m.resumeLocked()
 	}
 	m.held = held
+	if held {
+		m.freezeWaitLocked()
+	} else {
+		m.runWaitLocked()
+	}
 	m.scheduleLocked()
 	m.mu.Unlock()
 	m.notify()
@@ -197,6 +221,7 @@ func (m *Manager) Held() bool {
 func (m *Manager) Stop() int {
 	m.mu.Lock()
 	m.stopped, m.held = true, true
+	m.freezeWaitLocked()
 	n := 0
 	for _, it := range m.queue {
 		if it.Status == Downloading {
@@ -217,6 +242,7 @@ func (m *Manager) Resume() int {
 	m.mu.Lock()
 	n := m.resumeLocked()
 	m.held = false
+	m.runWaitLocked()
 	m.scheduleLocked()
 	m.saveLocked()
 	m.mu.Unlock()
@@ -472,6 +498,7 @@ func (m *Manager) ClearHistory() {
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	m.closed = true
+	m.dropWaitLocked()
 	m.estStop()
 	for _, cancel := range m.active {
 		cancel(errShutdown)
@@ -521,7 +548,7 @@ func (m *Manager) scheduleLocked() {
 		return
 	}
 	for _, it := range m.queue {
-		if len(m.active) >= m.cfg.Concurrency {
+		if len(m.active) >= m.cfg.Concurrency || m.waiting {
 			break
 		}
 		if it.Status == Queued {
@@ -680,6 +707,10 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, it *I
 
 	m.mu.Lock()
 	delete(m.active, it.ID)
+	// Pauses by Stop suspend rather than end a download: Resume continues it.
+	if cause != errShutdown && !m.stopPaused[it.ID] {
+		m.armWaitLocked()
+	}
 	var cleanup []string
 	it.Progress.Speed, it.Progress.ETA = 0, 0
 	switch {
