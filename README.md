@@ -31,7 +31,11 @@ downloads resume where they stopped.
   replaces the file.
 - **Hold the queue** with `P`: running downloads finish and nothing new
   starts, whether queued, added or sent with `vidl add`. `s` still starts a
-  download, and `P` again lifts the hold. The hold lasts for the session.
+  download, and `P` again lifts the hold. **Stop the queue** with `S`: it
+  pauses every running download (partial files are kept) and holds the
+  queue; `S` again resumes only the downloads the stop paused, so ones you
+  paused yourself stay paused. A `⏸ HELD` or `⏸ STOPPED` badge at the right
+  of the tab bar shows either state. Both last for the session.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads: open a file or show it in
   its folder, and clear the history.
@@ -290,6 +294,7 @@ automatically the next time you start vidl.
 | `s`                   | Start or resume; retries failed or cancelled        |
 | `p`                   | Pause, or put a paused download back in the queue   |
 | `P`                   | Hold or resume the queue (running downloads finish) |
+| `S`                   | Stop the queue (pauses running downloads) or start  |
 | `c`                   | Cancel (deletes partial files)                      |
 | `R`                   | Retry failed or cancelled, or re-download finished  |
 | `u` / `d`             | Move queued download up / down                      |
@@ -554,6 +559,7 @@ directly to see whether the problem is the site or vidl.
       or remove them together
 - [x] `vidl add` to queue URLs in a running vidl; single instance
 - [x] Hold the queue (`P`): running downloads finish, nothing new starts
+- [x] Stop and start the whole queue (`S`), with a held/stopped badge
 - [x] Estimated size for downloads that haven't started
 
 ## License

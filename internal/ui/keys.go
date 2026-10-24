@@ -8,7 +8,7 @@ type keyMap struct {
 	NextTab, PrevTab         key.Binding
 	Tab1, Tab2, Tab3         key.Binding
 	Start, Pause, Cancel     key.Binding
-	Hold                     key.Binding
+	Hold, StopQueue          key.Binding
 	Retry, Remove, New       key.Binding
 	Detail, Close            key.Binding
 	Why, CloseError          key.Binding
@@ -40,6 +40,7 @@ func newKeyMap() keyMap {
 		Start:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "start")),
 		Pause:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pause/requeue")),
 		Hold:         key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "hold queue")),
+		StopQueue:    key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "stop/start queue")),
 		Cancel:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "cancel")),
 		Retry:        key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "retry")),
 		Remove:       key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "remove")),
@@ -129,7 +130,7 @@ func (k tabKeys) ShortHelp() []key.Binding {
 	}
 	switch k.tab {
 	case tabDownloads:
-		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.whyKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Hold, k.Cancel, k.Browse, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
+		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.whyKey(), k.Mark, k.MarkAll, k.Start, k.Pause, k.Hold, k.StopQueue, k.Cancel, k.Browse, k.Remove, k.MoveUp, k.MoveDown, k.searchKey(), k.StatusFilter, k.NextTab, k.Help, k.Quit}
 	case tabFinished:
 		return []key.Binding{k.New, k.Up, k.Down, k.detailKey(), k.Mark, k.MarkAll, k.Open, k.Reveal, k.Browse, k.Remove, k.searchKey(), k.NextTab, k.Help, k.Quit}
 	case tabSettings:
@@ -147,7 +148,7 @@ func (k tabKeys) FullHelp() [][]key.Binding {
 	}
 	switch k.tab {
 	case tabDownloads:
-		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.whyKey(), k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Hold, k.Cancel, k.Retry}, {k.Browse, k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
+		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.whyKey(), k.Search, k.StatusFilter}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Start, k.Pause, k.Hold, k.StopQueue, k.Cancel, k.Retry}, {k.Browse, k.Remove, k.MoveUp, k.MoveDown}, tabs, general}
 	case tabFinished:
 		return [][]key.Binding{nav, append([]key.Binding{k.Detail, k.Search}, k.escKeys()...), {k.Mark, k.MarkAll}, {k.Open, k.Reveal, k.Browse, k.redownloadKey(), k.Remove, k.ClearHistory}, tabs, general}
 	case tabSettings:
