@@ -541,6 +541,21 @@ yt-dlp still reads its own config file and plugins when vidl runs it, so
 these apply without changing vidl. See the
 [yt-dlp PO token guide](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide).
 
+If the error stays with all of these in place, YouTube blocks the IP address
+itself. Residential IPs get flagged too after many requests in a short time,
+and vidl adds a size lookup per queued download on top of the downloads. Get
+a new IP (with a dynamic address, reconnecting or restarting the router
+usually does it; compare `curl -s ipinfo.io/ip` before and after) or wait a
+few hours. Afterwards, lower `concurrency` and turn on `wait_enabled` for a
+while so the new IP isn't flagged too.
+
+As a last resort, set `cookies_from_browser` to a browser where you're
+logged in to YouTube, preferably with a spare account, since YouTube may flag
+the account instead. yt-dlp reads the browser's default profile. On macOS,
+allow the Keychain prompt for the browser's "Safe Storage" key, or reading
+Chrome-based browsers' cookies fails. Downloads that already failed keep
+their error until you retry them with `R`.
+
 **`[yt-dlp ffmpeg] not found on PATH`.** Install the missing tool (see
 [Requirements](#requirements)) and check `which yt-dlp ffmpeg`.
 
