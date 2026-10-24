@@ -338,13 +338,18 @@ func (m *Model) adjustSetting(s setting, delta int) {
 func (m *Model) applySetting(s setting, v string) {
 	cfg := m.mgr.Config()
 	s.set(&cfg, v)
+	m.report(m.saveConfig(cfg))
+}
+
+// saveConfig hands cfg to the manager and saves it to the config file; the
+// manager keeps it even when saving fails.
+func (m *Model) saveConfig(cfg config.Config) error {
 	cfg = cfg.Normalize()
 	m.mgr.SetConfig(cfg)
 	if err := config.Save(m.cfgPath, cfg); err != nil {
-		m.report(fmt.Errorf("saving settings: %w", err))
-		return
+		return fmt.Errorf("saving settings: %w", err)
 	}
-	m.report(nil)
+	return nil
 }
 
 func (m Model) settingValueWidth() int {
