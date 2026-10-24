@@ -52,6 +52,10 @@ type NewItem struct {
 
 	// SponsorBlock false skips the sponsorblock_remove setting; nil follows it.
 	SponsorBlock *bool
+
+	// Paused adds the item paused: it waits for Start or Requeue instead of
+	// starting once a slot is free.
+	Paused bool
 }
 
 // Manager owns the download queue and history. Queued items start

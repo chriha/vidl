@@ -44,6 +44,7 @@ const (
 	focusTemplate
 	focusSubtitles
 	focusSponsorBlock // only while the sponsorblock_remove setting is set
+	focusStatus
 )
 
 // playlistPreview is the number of pasted URLs listed in the batch step.
