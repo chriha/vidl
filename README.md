@@ -18,7 +18,8 @@ downloads resume where they stopped.
   its title, uploader, duration and approximate size, pick a format and
   resolution, and queue it. Per download you can also download only a clip
   (start and end time), use a different filename template, turn embedded
-  subtitles on or off, or keep sponsor segments. Playlists open a checklist to leave out entries before queueing;
+  subtitles on or off, or keep sponsor segments, and add it queued, paused or
+  started right away. Playlists open a checklist to leave out entries before queueing;
   pasting several URLs at once queues them all with the default settings.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
@@ -190,7 +191,7 @@ The UI has three tabs:
 Press `n` to add a download. If the clipboard holds a URL, it's already
 filled in; otherwise paste or type one and press `enter` to fetch its details.
 Move between the fields with `tab`/`shift+tab` or `↑`/`↓` (`j`/`k` outside
-text fields), change the file type, resolution, subtitles and sponsors with `h`/`l`,
+text fields), change the file type, resolution, subtitles, sponsors and status with `h`/`l`,
 and type into the text fields. Then press `enter` to queue it, or `esc` to go
 back and edit the URL. Resolutions above the video's best are hidden, and
 audio formats ignore the resolution.
@@ -207,6 +208,11 @@ audio formats ignore the resolution.
 - **Sponsors** removes the `sponsorblock_remove` categories from this
   download (`remove`, the default) or keeps them (`keep`). It's only shown
   when that setting is set.
+- **Status** is how the download is added: `Queued` (the default) starts once
+  a slot is free, `Paused` waits until you start it with `s` or queue it with
+  `p`, and `Start now` starts it right away like `s`, even past the
+  concurrency limit or while the queue is held. Playlists offer only `Queued`
+  and `Paused`.
 
 These choices stay with the download across pause, retry and restarts, and
 the detail panel lists the ones that differ from the settings. For a
@@ -217,7 +223,8 @@ when everything is checked). `enter` continues to the settings above (at least
 one entry must be checked) and queues only the checked entries in playlist
 order; `esc` goes back a step with the selection kept. The clip fields are
 hidden for playlists. Pasting several URLs at once offers to queue them all with the
-default format and resolution, without fetching details first. While the
+default format and resolution, without fetching details first; `h`/`l`/`space`
+switch them between `Queued` and `Paused`. While the
 dialog is open, other keys are disabled; `ctrl+c` still quits.
 
 Press `/` to search the current tab: the list narrows to downloads whose
@@ -555,6 +562,7 @@ directly to see whether the problem is the site or vidl.
 - [x] `vidl add` to queue URLs in a running vidl; single instance
 - [x] Hold the queue (`P`): running downloads finish, nothing new starts
 - [x] Estimated size for downloads that haven't started
+- [x] Add downloads queued, paused or started right away from the dialog
 
 ## License
 
