@@ -338,7 +338,8 @@ The Settings tab checks values as you enter them: the download folder must be
 an absolute path or start with `~`, and vidl offers to create it if it doesn't
 exist; the rate limit must be a number with an optional `K`, `M` or `G`
 suffix; SponsorBlock categories must be a comma-separated list of known
-categories, or `all`.
+categories, or `all`; the wait duration must be a duration such as `30s`, `2m`
+or `1m30s`, from 1 second to 1 hour.
 
 ```toml
 download_dir = "~/Downloads"
@@ -354,6 +355,8 @@ rate_limit = ""
 cookies_from_browser = ""
 notify = true
 sponsorblock_remove = ""
+wait_enabled = false
+wait_duration = "30s"
 ```
 
 | Key                    | Default                       | Description |
@@ -371,6 +374,8 @@ sponsorblock_remove = ""
 | `cookies_from_browser` | empty (disabled)              | Use cookies from `brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari` or `vivaldi`, for private, members-only or age-restricted videos. |
 | `notify`               | `true`                        | Desktop notification when a download finishes or fails. |
 | `sponsorblock_remove`  | empty (disabled)              | [SponsorBlock](https://sponsor.ajay.app/) categories to cut out of videos, comma-separated: `sponsor`, `intro`, `outro`, `selfpromo`, `preview`, `filler`, `interaction`, `music_offtopic`, or `all`. Cutting re-encodes around the cuts, so post-processing takes longer. |
+| `wait_enabled`         | `false`                       | Wait `wait_duration` after a download ends before the next queued one starts. |
+| `wait_duration`        | `30s`                         | How long to wait between downloads, as a duration such as `45s`, `2m` or `1m30s` (1s–1h). |
 
 Changing settings affects downloads that start afterwards; running downloads
 keep the settings they started with. `notify` applies at once.

@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,6 +21,8 @@ const (
 
 	MinWait = time.Second // shortest wait_duration
 	MaxWait = time.Hour   // longest wait_duration
+
+	defaultWait = 30 * time.Second
 )
 
 // Browsers that yt-dlp can read cookies from.
@@ -53,6 +56,7 @@ func Default() Config {
 		SubtitleLangs:     "en.*",
 		EmbedMetadata:     true,
 		Notify:            true,
+		WaitDuration:      defaultWait.String(),
 	}
 }
 
@@ -118,18 +122,32 @@ func (c Config) Normalize() Config {
 	if !slices.Contains(Browsers, c.CookiesFromBrowser) {
 		c.CookiesFromBrowser = ""
 	}
+	if _, err := ParseWaitDuration(c.WaitDuration); err != nil {
+		c.WaitDuration = def.WaitDuration
+	}
 	return c
 }
 
 // ParseWaitDuration parses a wait_duration value and checks it lies within
 // MinWait and MaxWait.
 func ParseWaitDuration(v string) (time.Duration, error) {
-	return 0, errors.New("not implemented")
+	d, err := time.ParseDuration(strings.TrimSpace(v))
+	if err != nil {
+		return 0, errors.New("use a duration like 30s, 2m or 1m30s")
+	}
+	if d < MinWait || d > MaxWait {
+		return 0, fmt.Errorf("use a duration from %v to %v", MinWait, MaxWait)
+	}
+	return d, nil
 }
 
-// WaitTime returns WaitDuration parsed.
+// WaitTime returns WaitDuration parsed, or the default for an invalid value.
 func (c Config) WaitTime() time.Duration {
-	return 0
+	d, err := ParseWaitDuration(c.WaitDuration)
+	if err != nil {
+		return defaultWait
+	}
+	return d
 }
 
 // DownloadPath returns DownloadDir with a leading ~ expanded.

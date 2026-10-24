@@ -67,6 +67,17 @@ var settings = []setting{
 		set: func(c *config.Config, v string) { c.Concurrency, _ = strconv.Atoi(v) },
 	},
 	{
+		label: "Wait between downloads", help: "Pause before the next queued download starts.", kind: kindBool,
+		get: func(c config.Config) string { return strconv.FormatBool(c.WaitEnabled) },
+		set: func(c *config.Config, v string) { c.WaitEnabled = v == "true" },
+	},
+	{
+		label: "Wait duration", help: "Time to wait, e.g. 30s, 2m or 1m30s (1s to 1h).", kind: kindText,
+		get:      func(c config.Config) string { return c.WaitDuration },
+		set:      func(c *config.Config, v string) { c.WaitDuration = v },
+		validate: validateWaitDuration,
+	},
+	{
 		label: "Default resolution", help: "Maximum video height for new downloads.", kind: kindEnum,
 		options: ytdlp.Resolutions, show: resolutionName,
 		get: func(c config.Config) string { return c.DefaultResolution },
@@ -176,6 +187,14 @@ func validateRateLimit(v string) (string, error) {
 	v = strings.ToUpper(strings.TrimSpace(v))
 	if v != "" && !rateLimitRe.MatchString(v) {
 		return "", errors.New("use a number with an optional K, M or G suffix, e.g. 500K")
+	}
+	return v, nil
+}
+
+func validateWaitDuration(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if _, err := config.ParseWaitDuration(v); err != nil {
+		return "", err
 	}
 	return v, nil
 }
