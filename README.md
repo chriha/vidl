@@ -21,6 +21,9 @@ downloads resume where they stopped.
   subtitles on or off, or keep sponsor segments, and add it queued, paused or
   started right away. Playlists open a checklist to leave out entries before queueing;
   pasting several URLs at once queues them all with the default settings.
+- **Duplicate warning**: adding a video that's already downloaded or still in
+  the queue asks before adding it again; in playlists and pasted batches such
+  videos start unchecked or are skipped, and `vidl add` skips them.
 - **Download queue** with a configurable number of concurrent downloads.
   Queued items start automatically, top to bottom.
 - **Per-download progress**: percentage, speed and ETA, combined across the
@@ -176,10 +179,15 @@ vidl 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
 Only one vidl runs at a time, since it owns the queue file. While it runs,
 `vidl add <url>` hands the URLs to it over a local socket (`vidl.sock` in the
 config directory), where they're queued with the default format and
-resolution and a toast confirms them. `vidl <url>` does the same instead of
+resolution and a toast confirms them. URLs already downloaded or still in
+the queue are skipped, and the toast and the `Added …` line count only the
+downloads actually added (e.g. `Added 2 downloads from vidl add · skipped 1
+already downloaded or queued`). `vidl <url>` does the same instead of
 opening a second UI, and plain `vidl` exits with `vidl is already running`.
 With no vidl running, `vidl add` appends the URLs to the saved queue and they
-start the next time vidl opens:
+start the next time vidl opens; they aren't checked for duplicates then.
+URLs passed to `vidl <url>` when it starts the UI are checked against the
+saved queue and history, and a toast names how many were skipped:
 
 ```sh
 vidl add 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
@@ -212,6 +220,13 @@ and type into the text fields. Then press `enter` to queue it, or `esc` to go
 back and edit the URL. Resolutions above the video's best are hidden, and
 audio formats ignore the resolution.
 
+If the video is already downloaded, or waiting, running or paused in the
+queue, the dialog says so first (`Already downloaded` or `Already in the
+queue`) with its title, status, date and file: `enter` adds it anyway and
+continues to the fields, `esc` goes back to the URL. Videos match on
+yt-dlp's video id, or on the exact URL when the id isn't known yet. Failed
+and cancelled downloads don't count.
+
 - **Clip start / end** download only part of the video. Times are
   `[[h:]m:]s`, e.g. `90`, `1:30` or `1:02:03`; leave start empty to begin at
   the start and end empty to go to the end. The end must be after the start,
@@ -237,10 +252,15 @@ move, `g`/`G` jump to the first/last entry, `ctrl+d`/`ctrl+u` move half a page,
 `space` toggles the entry and moves down, and `a` checks all (or unchecks all
 when everything is checked). `enter` continues to the settings above (at least
 one entry must be checked) and queues only the checked entries in playlist
-order; `esc` goes back a step with the selection kept. The clip fields are
+order; `esc` goes back a step with the selection kept. Entries already
+downloaded or in the queue start unchecked and are marked `already
+downloaded` or `in queue`; check them to add them anyway. The clip fields are
 hidden for playlists. Pasting several URLs at once offers to queue them all with the
 default format and resolution, without fetching details first; `h`/`l`/`space`
-switch them between `Queued` and `Paused`. While the
+switch them between `Queued` and `Paused`. URLs already downloaded or in the
+queue are marked and skipped, and the header counts them; if every URL is a
+duplicate, the dialog shows an error. To add one anyway, add it on its own.
+While the
 dialog is open, other keys are disabled; `ctrl+c` still quits.
 
 Press `/` to search the current tab: the list narrows to downloads whose
@@ -604,6 +624,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Add downloads queued, paused or started right away from the dialog
 - [x] `vidl add --paused` to add downloads paused
 - [x] Wait a set time between downloads (`W`), with a countdown badge
+- [x] Warn before re-adding a video that's already downloaded or queued
 
 ## License
 

@@ -119,16 +119,27 @@ func runUI(dir string, store queue.FileStore, urls []string) error {
 	if err != nil {
 		return fmt.Errorf("loading queue: %w", err)
 	}
+	skipped := addStartURLs(mgr, urls)
+
+	p := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version).WithNotifier(notify.System{}))
+	if skipped > 0 {
+		// send blocks until the UI loop runs.
+		go p.Send(ui.NoticeMsg{Text: fmt.Sprintf("Skipped %d already downloaded or queued", skipped)})
+	}
+	stopServer := serveAdds(dir, p.Send)
+	_, runErr := p.Run()
+	return errors.Join(runErr, stopServer(), mgr.Close())
+}
+
+// addStartURLs queues the URLs passed on the command line, skipping the ones
+// already downloaded or queued, and returns the number skipped.
+func addStartURLs(mgr *queue.Manager, urls []string) (skipped int) {
 	var reqs []queue.NewItem
 	for _, u := range urls {
 		reqs = append(reqs, queue.NewItem{URL: u})
 	}
-	mgr.Add(reqs...)
-
-	p := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version).WithNotifier(notify.System{}))
-	stopServer := serveAdds(dir, p.Send)
-	_, runErr := p.Run()
-	return errors.Join(runErr, stopServer(), mgr.Close())
+	_, skipped = ui.AddUnique(mgr, reqs)
+	return skipped
 }
 
 // serveAdds listens for `vidl add` and hands the URLs to the UI through
