@@ -2,12 +2,13 @@ package ui
 
 import "github.com/chriha/vidl/internal/queue"
 
-// AddURLsMsg asks the model to queue URLs handed over by `vidl add`, with the
-// default format and resolution. When Added is set, it receives the number of
-// downloads queued, so it needs room for one value.
+// AddURLsMsg asks the model to add URLs handed over by `vidl add`, with the
+// default format and resolution, queued or (with Paused) paused. When Added is
+// set, it receives the number of downloads added, so it needs room for one value.
 type AddURLsMsg struct {
-	URLs  []string
-	Added chan<- int
+	URLs   []string
+	Paused bool
+	Added  chan<- int
 }
 
 // ErrorMsg shows an error from outside the UI loop as a toast.

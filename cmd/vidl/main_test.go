@@ -72,11 +72,11 @@ func serve(t *testing.T, dir string) *fakeServer {
 // startServer listens on dir's socket; stop shuts it down.
 func startServer(dir string) (f *fakeServer, stop func(), err error) {
 	f = &fakeServer{}
-	srv, err := ipc.Listen(ipc.SocketPath(dir), func(urls []string) (int, error) {
+	srv, err := ipc.Listen(ipc.SocketPath(dir), func(req ipc.Request) (int, error) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		f.urls = append(f.urls, urls...)
-		return len(urls), nil
+		f.urls = append(f.urls, req.Add...)
+		return len(req.Add), nil
 	})
 	if err != nil {
 		return nil, nil, err
@@ -285,7 +285,7 @@ func TestForwardToUI(t *testing.T) {
 			sent = m.URLs
 			m.Added <- len(m.URLs)
 		}, time.Second)
-		n, err := h([]string{"https://a", "https://b"})
+		n, err := h(ipc.Request{Add: []string{"https://a", "https://b"}})
 		if err != nil || n != 2 {
 			t.Fatalf("handler = %d, %v; want 2, nil", n, err)
 		}
@@ -295,7 +295,7 @@ func TestForwardToUI(t *testing.T) {
 	})
 	t.Run("fails when the UI does not answer", func(t *testing.T) {
 		h := forwardToUI(func(tea.Msg) {}, 10*time.Millisecond)
-		if n, err := h([]string{"https://a"}); err == nil || n != 0 {
+		if n, err := h(ipc.Request{Add: []string{"https://a"}}); err == nil || n != 0 {
 			t.Fatalf("handler = %d, %v; want 0 and an error", n, err)
 		}
 	})

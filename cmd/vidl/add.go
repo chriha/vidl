@@ -20,7 +20,7 @@ func add(dir string, urls []string, out io.Writer) error {
 	if len(urls) == 0 || slices.ContainsFunc(urls, func(u string) bool { return strings.HasPrefix(u, "-") }) {
 		return errors.New("usage: vidl add <url> [<url>...]")
 	}
-	err := forward(dir, urls, out)
+	err := forward(dir, ipc.Request{Add: urls}, out)
 	if !errors.Is(err, ipc.ErrNoServer) {
 		return err
 	}
@@ -37,7 +37,7 @@ func add(dir string, urls []string, out io.Writer) error {
 	}
 	ids, err := store.AppendQueued(cfg, reqs...)
 	if errors.Is(err, queue.ErrLocked) {
-		return forwardToLockHolder(dir, store, urls, out)
+		return forwardToLockHolder(dir, store, ipc.Request{Add: urls}, out)
 	}
 	if len(ids) > 0 {
 		fmt.Fprintf(out, "Queued %s; they start when vidl runs\n", downloads(len(ids)))
@@ -48,10 +48,10 @@ func add(dir string, urls []string, out io.Writer) error {
 	return nil
 }
 
-// forward hands urls to the running vidl and reports how many it added. It
+// forward hands req to the running vidl and reports how many it added. It
 // fails with ipc.ErrNoServer when nothing listens on the socket.
-func forward(dir string, urls []string, out io.Writer) error {
-	n, err := ipc.Send(ipc.SocketPath(dir), urls, ipc.DefaultTimeout)
+func forward(dir string, req ipc.Request, out io.Writer) error {
+	n, err := ipc.Send(ipc.SocketPath(dir), req, ipc.DefaultTimeout)
 	if err != nil {
 		return err
 	}
@@ -63,12 +63,12 @@ func forward(dir string, urls []string, out io.Writer) error {
 // the lock: a starting vidl takes the lock before it listens.
 const startupGrace = time.Second
 
-// forwardToLockHolder hands urls to the vidl holding the queue lock, waiting
+// forwardToLockHolder hands req to the vidl holding the queue lock, waiting
 // up to startupGrace for it to listen.
-func forwardToLockHolder(dir string, store queue.FileStore, urls []string, out io.Writer) error {
+func forwardToLockHolder(dir string, store queue.FileStore, req ipc.Request, out io.Writer) error {
 	deadline := time.Now().Add(startupGrace)
 	for {
-		err := forward(dir, urls, out)
+		err := forward(dir, req, out)
 		if !errors.Is(err, ipc.ErrNoServer) {
 			return err
 		}

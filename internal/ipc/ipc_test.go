@@ -55,15 +55,15 @@ func TestSendRoundTrip(t *testing.T) {
 		mu  sync.Mutex
 		got []string
 	)
-	_, path := startServer(t, func(urls []string) (int, error) {
+	_, path := startServer(t, func(req Request) (int, error) {
 		mu.Lock()
 		defer mu.Unlock()
-		got = append(got, urls...)
-		return len(urls), nil
+		got = append(got, req.Add...)
+		return len(req.Add), nil
 	})
 
 	urls := []string{"https://example.com/a", "https://example.com/b?x=1&y=2"}
-	n, err := Send(path, urls, time.Second)
+	n, err := Send(path, Request{Add: urls}, time.Second)
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -78,11 +78,11 @@ func TestSendRoundTrip(t *testing.T) {
 }
 
 func TestSendReturnsHandlerError(t *testing.T) {
-	_, path := startServer(t, func([]string) (int, error) {
+	_, path := startServer(t, func(Request) (int, error) {
 		return 0, errors.New("queue is full")
 	})
 
-	_, err := Send(path, []string{"https://example.com/a"}, time.Second)
+	_, err := Send(path, Request{Add: []string{"https://example.com/a"}}, time.Second)
 	if err == nil || !strings.Contains(err.Error(), "queue is full") {
 		t.Fatalf("err = %v, want the handler's error", err)
 	}
@@ -104,9 +104,9 @@ func TestServerRejectsBadRequests(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			called := false
-			_, path := startServer(t, func(urls []string) (int, error) {
+			_, path := startServer(t, func(req Request) (int, error) {
 				called = true
-				return len(urls), nil
+				return len(req.Add), nil
 			})
 
 			conn, err := net.Dial("unix", path)
@@ -149,7 +149,7 @@ func TestSendNoServer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(shortDir(t), "vidl.sock")
 			tt.setup(t, path)
-			_, err := Send(path, []string{"https://example.com/a"}, time.Second)
+			_, err := Send(path, Request{Add: []string{"https://example.com/a"}}, time.Second)
 			if !errors.Is(err, ErrNoServer) {
 				t.Fatalf("err = %v, want ErrNoServer", err)
 			}
@@ -173,7 +173,7 @@ func TestSendTimesOutOnSilentServer(t *testing.T) {
 	}()
 
 	start := time.Now()
-	_, err = Send(path, []string{"https://example.com/a"}, 50*time.Millisecond)
+	_, err = Send(path, Request{Add: []string{"https://example.com/a"}}, 50*time.Millisecond)
 	if !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("err = %v, want a deadline error", err)
 	}
@@ -191,7 +191,7 @@ func TestSendTimesOutOnSilentServer(t *testing.T) {
 }
 
 func TestServerDropsSilentClient(t *testing.T) {
-	_, path := startServer(t, func(urls []string) (int, error) { return len(urls), nil },
+	_, path := startServer(t, func(req Request) (int, error) { return len(req.Add), nil },
 		func(s *Server) { s.timeout = 50 * time.Millisecond })
 
 	conn, err := net.Dial("unix", path)
@@ -216,14 +216,14 @@ func TestListenRecoversStaleSocket(t *testing.T) {
 	path := filepath.Join(shortDir(t), "vidl.sock")
 	makeStaleSocket(t, path)
 
-	s, err := Listen(path, func(urls []string) (int, error) { return len(urls), nil })
+	s, err := Listen(path, func(req Request) (int, error) { return len(req.Add), nil })
 	if err != nil {
 		t.Fatalf("Listen over a stale socket: %v", err)
 	}
 	done := make(chan struct{})
 	go func() { s.Serve(); close(done) }()
 
-	if n, err := Send(path, []string{"https://example.com/a"}, time.Second); err != nil || n != 1 {
+	if n, err := Send(path, Request{Add: []string{"https://example.com/a"}}, time.Second); err != nil || n != 1 {
 		t.Errorf("Send = %d, %v; want 1, nil", n, err)
 	}
 	if err := s.Close(); err != nil {
@@ -236,14 +236,14 @@ func TestListenRecoversStaleSocket(t *testing.T) {
 }
 
 func TestListenRefusesLiveSocket(t *testing.T) {
-	_, path := startServer(t, func(urls []string) (int, error) { return len(urls), nil })
+	_, path := startServer(t, func(req Request) (int, error) { return len(req.Add), nil })
 
-	_, err := Listen(path, func(urls []string) (int, error) { return len(urls), nil })
+	_, err := Listen(path, func(req Request) (int, error) { return len(req.Add), nil })
 	if !errors.Is(err, ErrRunning) {
 		t.Fatalf("err = %v, want ErrRunning", err)
 	}
 	// The live server must still answer.
-	if _, err := Send(path, []string{"https://example.com/a"}, time.Second); err != nil {
+	if _, err := Send(path, Request{Add: []string{"https://example.com/a"}}, time.Second); err != nil {
 		t.Errorf("Send after refused Listen: %v", err)
 	}
 }
@@ -292,17 +292,17 @@ func TestDialErrorOtherThanRefusedKeepsSocket(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("needs Unix socket permissions enforced for a non-root user")
 	}
-	_, path := startServer(t, func(urls []string) (int, error) { return len(urls), nil })
+	_, path := startServer(t, func(req Request) (int, error) { return len(req.Add), nil })
 	if err := os.Chmod(path, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(path, 0o600) })
 
-	_, err := Send(path, []string{"https://example.com/a"}, time.Second)
+	_, err := Send(path, Request{Add: []string{"https://example.com/a"}}, time.Second)
 	if err == nil || errors.Is(err, ErrNoServer) {
 		t.Errorf("Send err = %v, want a non-ErrNoServer error", err)
 	}
-	_, err = Listen(path, func(urls []string) (int, error) { return len(urls), nil })
+	_, err = Listen(path, func(req Request) (int, error) { return len(req.Add), nil })
 	if err == nil || errors.Is(err, ErrRunning) {
 		t.Errorf("Listen err = %v, want a dial error", err)
 	}
@@ -310,7 +310,7 @@ func TestDialErrorOtherThanRefusedKeepsSocket(t *testing.T) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Send(path, []string{"https://example.com/a"}, time.Second); err != nil {
+	if _, err := Send(path, Request{Add: []string{"https://example.com/a"}}, time.Second); err != nil {
 		t.Errorf("Send after restoring permissions: %v (socket was removed?)", err)
 	}
 }
