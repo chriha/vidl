@@ -1,6 +1,7 @@
 // Package ipc hands URLs to a running vidl over a local Unix domain socket.
-// Each connection carries one JSON request ({"add":["url",...]}) and one JSON
-// reply ({"added":N} or {"error":"..."}), both bounded by a timeout.
+// Each connection carries one JSON request ({"add":["url",...]}, plus
+// "paused":true to add them paused) and one JSON reply ({"added":N} or
+// {"error":"..."}), both bounded by a timeout.
 package ipc
 
 import (
@@ -46,6 +47,8 @@ var (
 // Request is the client's message.
 type Request struct {
 	Add []string `json:"add"`
+	// Paused asks to add the URLs paused instead of queued.
+	Paused bool `json:"paused,omitempty"`
 }
 
 // Reply is the server's answer to one Request.
@@ -54,9 +57,9 @@ type Reply struct {
 	Error string `json:"error,omitempty"`
 }
 
-// Handler queues the URLs of one request and returns how many were added.
+// Handler adds the URLs of one request and returns how many were added.
 // It must return promptly; requests are handled one at a time.
-type Handler func(urls []string) (int, error)
+type Handler func(req Request) (int, error)
 
 // SocketPath returns the socket path for a config dir. When that path is too
 // long for a Unix socket, it falls back to a private directory under
@@ -157,7 +160,7 @@ func (s *Server) serveConn(conn net.Conn) error {
 		reply.Error = "bad request: " + err.Error()
 	} else if len(req.Add) == 0 {
 		reply.Error = "no URLs to add"
-	} else if n, err := s.handle(req.Add); err != nil {
+	} else if n, err := s.handle(req); err != nil {
 		reply.Error = err.Error()
 	} else {
 		reply.Added = n
@@ -172,10 +175,10 @@ func (s *Server) serveConn(conn net.Conn) error {
 	return nil
 }
 
-// Send hands urls to the vidl listening at path and returns how many it
+// Send hands req to the vidl listening at path and returns how many it
 // added. It fails with ErrNoServer when the socket is missing or stale;
 // other dial errors (a timeout, no permission) are returned as they are.
-func Send(path string, urls []string, timeout time.Duration) (int, error) {
+func Send(path string, req Request, timeout time.Duration) (int, error) {
 	conn, err := net.DialTimeout("unix", path, timeout)
 	if err != nil {
 		if noListener(err) {
@@ -187,7 +190,7 @@ func Send(path string, urls []string, timeout time.Duration) (int, error) {
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return 0, fmt.Errorf("set deadline: %w", err)
 	}
-	if err := json.NewEncoder(conn).Encode(Request{Add: urls}); err != nil {
+	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return 0, fmt.Errorf("send request: %w", err)
 	}
 	var reply Reply

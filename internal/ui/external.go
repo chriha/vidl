@@ -2,12 +2,13 @@ package ui
 
 import "github.com/chriha/vidl/internal/queue"
 
-// AddURLsMsg asks the model to queue URLs handed over by `vidl add`, with the
-// default format and resolution. When Added is set, it receives the number of
-// downloads queued, so it needs room for one value.
+// AddURLsMsg asks the model to add URLs handed over by `vidl add`, with the
+// default format and resolution, queued or (with Paused) paused. When Added is
+// set, it receives the number of downloads added, so it needs room for one value.
 type AddURLsMsg struct {
-	URLs  []string
-	Added chan<- int
+	URLs   []string
+	Paused bool
+	Added  chan<- int
 }
 
 // ErrorMsg shows an error from outside the UI loop as a toast.
@@ -17,7 +18,7 @@ type ErrorMsg struct{ Err error }
 func (m *Model) addExternal(msg AddURLsMsg) {
 	reqs := make([]queue.NewItem, len(msg.URLs))
 	for i, u := range msg.URLs {
-		reqs[i] = queue.NewItem{URL: u}
+		reqs[i] = queue.NewItem{URL: u, Paused: msg.Paused}
 	}
 	ids := m.mgr.Add(reqs...)
 	if msg.Added != nil {
@@ -26,6 +27,10 @@ func (m *Model) addExternal(msg AddURLsMsg) {
 		default: // never block the UI loop on a full channel
 		}
 	}
-	m.notice("Added " + plural(len(ids), "download") + " from vidl add")
+	how := ""
+	if msg.Paused {
+		how = " paused"
+	}
+	m.notice("Added " + plural(len(ids), "download") + how + " from vidl add")
 	m.refresh()
 }

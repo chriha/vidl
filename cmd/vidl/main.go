@@ -27,8 +27,9 @@ import (
 var version = "dev"
 
 const usage = `Usage:
-  vidl [url...]       open the UI and queue the given URLs
-  vidl add <url>...   queue URLs in the running vidl
+  vidl [url...]                 open the UI and queue the given URLs
+  vidl add [--paused] <url>...  queue URLs in the running vidl; --paused adds
+                                them paused, to start later with s
 
 A terminal UI for downloading videos with yt-dlp.
 
@@ -80,7 +81,7 @@ func run(args []string, out io.Writer) error {
 		if len(args) == 0 {
 			return ipc.ErrRunning
 		}
-		return forwardToLockHolder(dir, store, args, out)
+		return forwardToLockHolder(dir, store, ipc.Request{Add: args}, out)
 	}
 	if err != nil {
 		return fmt.Errorf("lock %s: %w", store.LockPath(), err)
@@ -158,12 +159,12 @@ func serveAdds(dir string, send func(tea.Msg)) (stop func() error) {
 const handoffTimeout = ipc.DefaultTimeout / 2
 
 // forwardToUI returns the socket handler of the running instance: it passes
-// the URLs to the UI loop through send and waits up to timeout for the count.
+// the request to the UI loop through send and waits up to timeout for the count.
 // send returns once the UI took the message or the program has ended.
 func forwardToUI(send func(tea.Msg), timeout time.Duration) ipc.Handler {
-	return func(urls []string) (int, error) {
+	return func(req ipc.Request) (int, error) {
 		added := make(chan int, 1)
-		go send(ui.AddURLsMsg{URLs: urls, Added: added})
+		go send(ui.AddURLsMsg{URLs: req.Add, Paused: req.Paused, Added: added})
 		select {
 		case n := <-added:
 			return n, nil
