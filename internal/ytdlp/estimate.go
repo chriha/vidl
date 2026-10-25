@@ -10,6 +10,7 @@ import (
 // fetched with it.
 type Estimate struct {
 	Size      int64 // bytes; 0 when yt-dlp reports no size
+	ID        string
 	Title     string
 	Uploader  string
 	Extractor string
@@ -18,6 +19,7 @@ type Estimate struct {
 
 type rawEstimate struct {
 	rawSize
+	ID               string    `json:"id"`
 	Title            string    `json:"title"`
 	Uploader         string    `json:"uploader"`
 	Channel          string    `json:"channel"`
@@ -69,6 +71,7 @@ func ParseEstimate(data []byte) (*Estimate, error) {
 	}
 	return &Estimate{
 		Size:      raw.size(),
+		ID:        raw.ID,
 		Title:     raw.Title,
 		Uploader:  cmp(raw.Uploader, raw.Channel),
 		Extractor: raw.Extractor,

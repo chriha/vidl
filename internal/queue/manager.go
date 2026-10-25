@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,6 +43,7 @@ type NewItem struct {
 	Uploader   string
 	Duration   float64
 	Extractor  string
+	VideoID    string // yt-dlp's id of the video
 	Format     ytdlp.Format
 	Resolution string
 
@@ -303,6 +305,31 @@ func (m *Manager) Add(reqs ...NewItem) []string {
 	return ids
 }
 
+// FindDuplicate returns the finished or active (queued, downloading, paused)
+// download of the same video as r: same extractor and video id when both
+// sides have them, otherwise the same URL.
+func (m *Manager) FindDuplicate(r NewItem) (Item, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	same := func(it *Item) bool { return sameVideo(it, r) }
+	for _, it := range m.queue {
+		if it.Status != Failed && it.Status != Cancelled && same(it) {
+			return it.clone(), true
+		}
+	}
+	if i := slices.IndexFunc(m.history, same); i >= 0 {
+		return m.history[i].clone(), true
+	}
+	return Item{}, false
+}
+
+func sameVideo(it *Item, r NewItem) bool {
+	if it.Extractor != "" && it.VideoID != "" && r.Extractor != "" && r.VideoID != "" {
+		return strings.EqualFold(it.Extractor, r.Extractor) && it.VideoID == r.VideoID
+	}
+	return it.URL == r.URL
+}
+
 // newItem builds a queued item for r, or a paused one when r asks for it; a
 // missing format or resolution follows cfg.
 func newItem(r NewItem, cfg config.Config) *Item {
@@ -313,6 +340,7 @@ func newItem(r NewItem, cfg config.Config) *Item {
 		Uploader:   r.Uploader,
 		Duration:   r.Duration,
 		Extractor:  r.Extractor,
+		VideoID:    r.VideoID,
 		Format:     r.Format,
 		Resolution: r.Resolution,
 		Status:     Queued,
@@ -609,6 +637,9 @@ func applyEstimate(it *Item, est *ytdlp.Estimate, err error) {
 	}
 	if it.Extractor == "" {
 		it.Extractor = est.Extractor
+	}
+	if it.VideoID == "" {
+		it.VideoID = est.ID
 	}
 	if it.Duration == 0 {
 		it.Duration = est.Duration

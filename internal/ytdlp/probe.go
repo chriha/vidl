@@ -29,10 +29,11 @@ type Info struct {
 
 // Entry is a playlist item.
 type Entry struct {
-	ID       string
-	Title    string
-	URL      string
-	Duration float64
+	ID        string
+	Title     string
+	URL       string
+	Duration  float64
+	Extractor string // the entry's own extractor (ie_key), not the playlist's
 }
 
 type rawInfo struct {
@@ -44,6 +45,7 @@ type rawInfo struct {
 	WebpageURL     string  `json:"webpage_url"`
 	URL            string  `json:"url"`
 	Extractor      string  `json:"extractor_key"`
+	IEKey          string  `json:"ie_key"` // set on flat playlist entries
 	Thumbnail      string  `json:"thumbnail"`
 	Duration       float64 `json:"duration"`
 	FilesizeApprox float64 `json:"filesize_approx"`
@@ -107,10 +109,11 @@ func ParseInfo(data []byte) (*Info, error) {
 	}
 	for _, e := range raw.Entries {
 		info.Entries = append(info.Entries, Entry{
-			ID:       e.ID,
-			Title:    e.Title,
-			URL:      cmp(e.URL, e.WebpageURL),
-			Duration: e.Duration,
+			ID:        e.ID,
+			Title:     e.Title,
+			URL:       cmp(e.URL, e.WebpageURL),
+			Duration:  e.Duration,
+			Extractor: cmp(e.IEKey, e.Extractor),
 		})
 	}
 	for _, f := range raw.Formats {

@@ -842,3 +842,32 @@ func TestDialogStatusBatch(t *testing.T) {
 		})
 	}
 }
+
+func TestDialogQueuesVideoIDs(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{
+		"https://x.test/v": {ID: "v1", Extractor: "Vimeo", Title: "V", URL: "https://x.test/v"},
+		"https://x.test/pl": {Title: "List", Extractor: "YoutubeTab", IsPlaylist: true, Entries: []ytdlp.Entry{
+			{ID: "e1", Extractor: "Youtube", Title: "One", URL: "https://x.test/1"},
+		}},
+	}}
+	tests := []struct {
+		name, url, wantID, wantExtractor string
+		keys                             []string
+	}{
+		{"single video", "https://x.test/v", "v1", "Vimeo", []string{"enter"}},
+		{"playlist entry uses its own extractor", "https://x.test/pl", "e1", "Youtube", []string{"enter", "enter"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, mgr := newDialogModel(t, p)
+			m.dialog.input.SetValue(tt.url)
+			m, res := submit(t, m)
+			m = update(t, m, res)
+			press(t, m, tt.keys...)
+			q, _ := mgr.Snapshot()
+			if len(q) != 1 || q[0].VideoID != tt.wantID || q[0].Extractor != tt.wantExtractor {
+				t.Fatalf("queue = %+v, want one item with id %s, extractor %s", q, tt.wantID, tt.wantExtractor)
+			}
+		})
+	}
+}

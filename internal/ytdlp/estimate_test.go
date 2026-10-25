@@ -16,15 +16,15 @@ func TestParseEstimate(t *testing.T) {
 		want    Estimate
 	}{
 		{"merged sums requested formats", "estimate_merged.json",
-			Estimate{Size: 302044 + 307551, Title: "Me at the zoo", Uploader: "jawed", Extractor: "Youtube", Duration: 19}},
+			Estimate{Size: 302044 + 307551, ID: "jNQXAC9IVRw", Title: "Me at the zoo", Uploader: "jawed", Extractor: "Youtube", Duration: 19}},
 		{"merged with an unsized part falls back to the total", "estimate_merged_partial.json",
-			Estimate{Size: 80000000, Title: "Merged, audio size unknown", Uploader: "Uploader", Extractor: "Youtube", Duration: 300}},
+			Estimate{Size: 80000000, ID: "jkl012", Title: "Merged, audio size unknown", Uploader: "Uploader", Extractor: "Youtube", Duration: 300}},
 		{"single format prefers filesize", "estimate_single.json",
-			Estimate{Size: 10485760, Title: "Single stream", Uploader: "Some Channel", Extractor: "Vimeo", Duration: 61.5}},
+			Estimate{Size: 10485760, ID: "abc123", Title: "Single stream", Uploader: "Some Channel", Extractor: "Vimeo", Duration: 61.5}},
 		{"filesize_approx fallback", "estimate_approx.json",
-			Estimate{Size: 52428800, Title: "Approximate only", Uploader: "Uploader", Extractor: "Generic", Duration: 120}},
+			Estimate{Size: 52428800, ID: "def456", Title: "Approximate only", Uploader: "Uploader", Extractor: "Generic", Duration: 120}},
 		{"no size is unknown", "estimate_none.json",
-			Estimate{Title: "Live stream", Uploader: "Uploader", Extractor: "Twitch"}},
+			Estimate{ID: "ghi789", Title: "Live stream", Uploader: "Uploader", Extractor: "Twitch"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
