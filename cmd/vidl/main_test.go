@@ -49,8 +49,15 @@ func holdLock(t *testing.T, store queue.FileStore) {
 
 // fakeServer plays a running instance's socket and records what it receives.
 type fakeServer struct {
-	mu   sync.Mutex
-	urls []string
+	mu     sync.Mutex
+	urls   []string
+	paused []bool // Paused of each request
+}
+
+func (f *fakeServer) gotPaused() []bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.paused)
 }
 
 func (f *fakeServer) got() []string {
@@ -76,6 +83,7 @@ func startServer(dir string) (f *fakeServer, stop func(), err error) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.urls = append(f.urls, req.Add...)
+		f.paused = append(f.paused, req.Paused)
 		return len(req.Add), nil
 	})
 	if err != nil {
@@ -95,6 +103,8 @@ func TestRunForwardsToRunningInstance(t *testing.T) {
 	}{
 		{"vidl url", []string{"https://a", "https://b"}, []string{"https://a", "https://b"}, "Added 2 downloads to the running vidl\n"},
 		{"vidl add", []string{"add", "https://a"}, []string{"https://a"}, "Added 1 download to the running vidl\n"},
+		{"vidl add --paused", []string{"add", "--paused", "https://a"}, []string{"https://a"}, "Added 1 download to the running vidl, paused\n"},
+		{"vidl add url --paused", []string{"add", "https://a", "https://b", "--paused"}, []string{"https://a", "https://b"}, "Added 2 downloads to the running vidl, paused\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -111,6 +121,10 @@ func TestRunForwardsToRunningInstance(t *testing.T) {
 			}
 			if out.String() != tt.out {
 				t.Errorf("output = %q, want %q", out.String(), tt.out)
+			}
+			wantPaused := []bool{slices.Contains(tt.args, "--paused")}
+			if got := srv.gotPaused(); !reflect.DeepEqual(got, wantPaused) {
+				t.Errorf("request paused = %v, want %v", got, wantPaused)
 			}
 			if _, err := os.Stat(store.Path); !errors.Is(err, os.ErrNotExist) {
 				t.Errorf("queue.json touched while an instance runs: %v", err)
@@ -206,6 +220,30 @@ func TestAddWithoutInstanceAppendsToQueueFile(t *testing.T) {
 	l.Release()
 }
 
+func TestAddPausedWithoutInstanceAppendsPaused(t *testing.T) {
+	_, store := testEnv(t)
+
+	var out bytes.Buffer
+	if err := run([]string{"add", "--paused", "https://a", "https://b"}, &out); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if want := "Added 2 downloads paused; start them in vidl\n"; out.String() != want {
+		t.Errorf("output = %q, want %q", out.String(), want)
+	}
+	after, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Queue) != 2 {
+		t.Fatalf("queue = %+v, want two items", after.Queue)
+	}
+	for i, url := range []string{"https://a", "https://b"} {
+		if it := after.Queue[i]; it.URL != url || it.Status != queue.Paused {
+			t.Errorf("item %d = %+v, want %s paused", i, it, url)
+		}
+	}
+}
+
 func TestAddUsageErrors(t *testing.T) {
 	tests := []struct {
 		name string
@@ -214,6 +252,8 @@ func TestAddUsageErrors(t *testing.T) {
 		{"no URLs", []string{"add"}},
 		{"help flag", []string{"add", "--help"}},
 		{"flag among URLs", []string{"add", "https://a", "-h"}},
+		{"only --paused", []string{"add", "--paused"}},
+		{"unknown flag with --paused", []string{"add", "--paused", "--start", "https://a"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -291,6 +331,19 @@ func TestForwardToUI(t *testing.T) {
 		}
 		if !reflect.DeepEqual(sent, []string{"https://a", "https://b"}) {
 			t.Errorf("sent %q", sent)
+		}
+	})
+	t.Run("passes paused to the UI", func(t *testing.T) {
+		var sent ui.AddURLsMsg
+		h := forwardToUI(func(msg tea.Msg) {
+			sent = msg.(ui.AddURLsMsg)
+			sent.Added <- len(sent.URLs)
+		}, time.Second)
+		if _, err := h(ipc.Request{Add: []string{"https://a"}, Paused: true}); err != nil {
+			t.Fatal(err)
+		}
+		if !sent.Paused || !reflect.DeepEqual(sent.URLs, []string{"https://a"}) {
+			t.Errorf("sent %+v, want https://a paused", sent)
 		}
 	})
 	t.Run("fails when the UI does not answer", func(t *testing.T) {

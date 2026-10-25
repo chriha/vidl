@@ -18,7 +18,7 @@ type ErrorMsg struct{ Err error }
 func (m *Model) addExternal(msg AddURLsMsg) {
 	reqs := make([]queue.NewItem, len(msg.URLs))
 	for i, u := range msg.URLs {
-		reqs[i] = queue.NewItem{URL: u}
+		reqs[i] = queue.NewItem{URL: u, Paused: msg.Paused}
 	}
 	ids := m.mgr.Add(reqs...)
 	if msg.Added != nil {
@@ -27,6 +27,10 @@ func (m *Model) addExternal(msg AddURLsMsg) {
 		default: // never block the UI loop on a full channel
 		}
 	}
-	m.notice("Added " + plural(len(ids), "download") + " from vidl add")
+	how := ""
+	if msg.Paused {
+		how = " paused"
+	}
+	m.notice("Added " + plural(len(ids), "download") + how + " from vidl add")
 	m.refresh()
 }

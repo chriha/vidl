@@ -77,6 +77,31 @@ func TestSendRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSendPassesPaused(t *testing.T) {
+	for _, paused := range []bool{false, true} {
+		var (
+			mu  sync.Mutex
+			got []Request
+		)
+		_, path := startServer(t, func(req Request) (int, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			got = append(got, req)
+			return len(req.Add), nil
+		})
+
+		req := Request{Add: []string{"https://example.com/a"}, Paused: paused}
+		if _, err := Send(path, req, time.Second); err != nil {
+			t.Fatalf("Send(paused=%v): %v", paused, err)
+		}
+		mu.Lock()
+		if len(got) != 1 || !reflect.DeepEqual(got[0], req) {
+			t.Errorf("paused=%v: handler got %+v, want %+v", paused, got, req)
+		}
+		mu.Unlock()
+	}
+}
+
 func TestSendReturnsHandlerError(t *testing.T) {
 	_, path := startServer(t, func(Request) (int, error) {
 		return 0, errors.New("queue is full")

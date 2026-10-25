@@ -14,13 +14,16 @@ import (
 	"github.com/chriha/vidl/internal/queue"
 )
 
-// add implements `vidl add`: it hands urls to the running vidl, or appends
-// them to queue.json when none runs.
-func add(dir string, urls []string, out io.Writer) error {
+// add implements `vidl add [--paused] <url>...`: it hands the URLs to the
+// running vidl, or appends them to queue.json when none runs.
+func add(dir string, args []string, out io.Writer) error {
+	paused := slices.Contains(args, "--paused")
+	urls := slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--paused" })
 	if len(urls) == 0 || slices.ContainsFunc(urls, func(u string) bool { return strings.HasPrefix(u, "-") }) {
-		return errors.New("usage: vidl add <url> [<url>...]")
+		return errors.New("usage: vidl add [--paused] <url> [<url>...]")
 	}
-	err := forward(dir, ipc.Request{Add: urls}, out)
+	req := ipc.Request{Add: urls, Paused: paused}
+	err := forward(dir, req, out)
 	if !errors.Is(err, ipc.ErrNoServer) {
 		return err
 	}
@@ -33,13 +36,15 @@ func add(dir string, urls []string, out io.Writer) error {
 	store := queue.FileStore{Path: filepath.Join(dir, "queue.json")}
 	reqs := make([]queue.NewItem, len(urls))
 	for i, u := range urls {
-		reqs[i] = queue.NewItem{URL: u}
+		reqs[i] = queue.NewItem{URL: u, Paused: paused}
 	}
 	ids, err := store.AppendQueued(cfg, reqs...)
 	if errors.Is(err, queue.ErrLocked) {
-		return forwardToLockHolder(dir, store, ipc.Request{Add: urls}, out)
+		return forwardToLockHolder(dir, store, req, out)
 	}
-	if len(ids) > 0 {
+	if len(ids) > 0 && paused {
+		fmt.Fprintf(out, "Added %s paused; start them in vidl\n", downloads(len(ids)))
+	} else if len(ids) > 0 {
 		fmt.Fprintf(out, "Queued %s; they start when vidl runs\n", downloads(len(ids)))
 	}
 	if err != nil {
@@ -55,7 +60,11 @@ func forward(dir string, req ipc.Request, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Added %s to the running vidl\n", downloads(n))
+	suffix := ""
+	if req.Paused {
+		suffix = ", paused"
+	}
+	fmt.Fprintf(out, "Added %s to the running vidl%s\n", downloads(n), suffix)
 	return nil
 }
 

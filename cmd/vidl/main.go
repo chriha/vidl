@@ -27,8 +27,9 @@ import (
 var version = "dev"
 
 const usage = `Usage:
-  vidl [url...]       open the UI and queue the given URLs
-  vidl add <url>...   queue URLs in the running vidl
+  vidl [url...]                 open the UI and queue the given URLs
+  vidl add [--paused] <url>...  queue URLs in the running vidl; --paused adds
+                                them paused, to start later with s
 
 A terminal UI for downloading videos with yt-dlp.
 
@@ -163,7 +164,7 @@ const handoffTimeout = ipc.DefaultTimeout / 2
 func forwardToUI(send func(tea.Msg), timeout time.Duration) ipc.Handler {
 	return func(req ipc.Request) (int, error) {
 		added := make(chan int, 1)
-		go send(ui.AddURLsMsg{URLs: req.Add, Added: added})
+		go send(ui.AddURLsMsg{URLs: req.Add, Paused: req.Paused, Added: added})
 		select {
 		case n := <-added:
 			return n, nil

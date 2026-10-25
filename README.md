@@ -60,8 +60,8 @@ downloads resume where they stopped.
 - **Desktop notifications** when a download finishes or fails. Downloads
   ending within about two seconds of each other share one notification.
 - **`vidl add`** hands URLs to the running vidl from scripts or browser
-  hooks. Only one vidl runs at a time; with none running, the URLs wait in the
-  saved queue for the next start.
+  hooks, queued or (with `--paused`) paused. Only one vidl runs at a time;
+  with none running, the URLs wait in the saved queue for the next start.
 - **Persistence**: queue and history are saved on every change; downloads
   running when you quit are resumed on the next start.
 - **Output formats**: mp4, mkv, webm (video) and mp3, m4a, opus (audio only),
@@ -162,6 +162,7 @@ To uninstall, run `make uninstall` and optionally remove the config directory
 vidl                        # open the UI
 vidl <url> [<url>...]       # open the UI and queue the given URLs
 vidl add <url> [<url>...]   # queue URLs in the running vidl
+vidl add --paused <url>...  # add them paused, to start later
 vidl --version
 vidl --help
 ```
@@ -186,6 +187,11 @@ vidl add 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
 #   or, with no vidl running:
 # Queued 1 download; they start when vidl runs
 ```
+
+`vidl add --paused <url>...` adds the downloads paused instead, in the
+running vidl or in the saved queue: they wait until you start them with `s`
+or queue them with `p`. The flag can stand anywhere among the URLs; any other
+argument starting with `-` is a usage error.
 
 The UI has three tabs:
 
@@ -596,6 +602,7 @@ directly to see whether the problem is the site or vidl.
 - [x] Stop and start the whole queue (`S`), with a held/stopped badge
 - [x] Estimated size for downloads that haven't started
 - [x] Add downloads queued, paused or started right away from the dialog
+- [x] `vidl add --paused` to add downloads paused
 - [x] Wait a set time between downloads (`W`), with a countdown badge
 
 ## License

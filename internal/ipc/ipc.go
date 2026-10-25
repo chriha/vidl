@@ -1,6 +1,7 @@
 // Package ipc hands URLs to a running vidl over a local Unix domain socket.
-// Each connection carries one JSON request ({"add":["url",...],"paused":true}) and one JSON
-// reply ({"added":N} or {"error":"..."}), both bounded by a timeout.
+// Each connection carries one JSON request ({"add":["url",...]}, plus
+// "paused":true to add them paused) and one JSON reply ({"added":N} or
+// {"error":"..."}), both bounded by a timeout.
 package ipc
 
 import (
@@ -159,7 +160,7 @@ func (s *Server) serveConn(conn net.Conn) error {
 		reply.Error = "bad request: " + err.Error()
 	} else if len(req.Add) == 0 {
 		reply.Error = "no URLs to add"
-	} else if n, err := s.handle(Request{Add: req.Add}); err != nil {
+	} else if n, err := s.handle(req); err != nil {
 		reply.Error = err.Error()
 	} else {
 		reply.Added = n
@@ -189,7 +190,7 @@ func Send(path string, req Request, timeout time.Duration) (int, error) {
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return 0, fmt.Errorf("set deadline: %w", err)
 	}
-	if err := json.NewEncoder(conn).Encode(Request{Add: req.Add}); err != nil {
+	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return 0, fmt.Errorf("send request: %w", err)
 	}
 	var reply Reply

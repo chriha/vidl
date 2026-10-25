@@ -72,6 +72,28 @@ func TestAddURLsMsgWithoutReplyChannel(t *testing.T) {
 	}
 }
 
+func TestAddURLsMsgPausedAddsPaused(t *testing.T) {
+	m, mgr, _ := newTestModel(t, 2)
+	added := make(chan int, 1)
+	m = update(t, m, AddURLsMsg{URLs: []string{"https://a", "https://b"}, Paused: true, Added: added})
+
+	q, _ := mgr.Snapshot()
+	if len(q) != 2 {
+		t.Fatalf("queue = %+v, want 2 items", q)
+	}
+	for _, it := range q {
+		if it.Status != queue.Paused {
+			t.Errorf("%s status = %v, want Paused although slots are free", it.URL, it.Status)
+		}
+	}
+	if n := <-added; n != 2 {
+		t.Errorf("added = %d, want 2", n)
+	}
+	if want := "Added 2 downloads paused from vidl add"; m.toast.text != want {
+		t.Errorf("toast = %q, want %q", m.toast.text, want)
+	}
+}
+
 func TestErrorMsgShowsErrorToast(t *testing.T) {
 	m, _, _ := newTestModel(t, 0)
 	err := errors.New("vidl add: accept: too many open files")
