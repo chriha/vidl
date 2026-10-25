@@ -100,7 +100,7 @@ func TestParseInfoVideo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.IsPlaylist || info.Title != "Me at the zoo" || info.Uploader != "jawed" {
+	if info.IsPlaylist || info.Title != "Me at the zoo" || info.Uploader != "jawed" || info.ID != "jNQXAC9IVRw" || info.Extractor != "Youtube" {
 		t.Errorf("info = %+v", info)
 	}
 	if !slices.Equal(info.Heights, []int{240, 144}) {
@@ -110,9 +110,9 @@ func TestParseInfoVideo(t *testing.T) {
 
 func TestParseInfoPlaylist(t *testing.T) {
 	info, err := ParseInfo([]byte(`{"_type": "playlist", "title": "List", "channel": "Ch",
-		"webpage_url": "https://example.com/list",
+		"webpage_url": "https://example.com/list", "extractor_key": "YoutubeTab",
 		"entries": [
-			{"_type": "url", "id": "a", "title": "A", "url": "https://example.com/a", "duration": 10},
+			{"_type": "url", "id": "a", "ie_key": "Youtube", "title": "A", "url": "https://example.com/a", "duration": 10},
 			{"_type": "url", "id": "b", "title": "B", "webpage_url": "https://example.com/b"}
 		]}`))
 	if err != nil {
@@ -123,6 +123,13 @@ func TestParseInfoPlaylist(t *testing.T) {
 	}
 	if info.Entries[1].URL != "https://example.com/b" {
 		t.Errorf("entry url = %q", info.Entries[1].URL)
+	}
+	// An entry's extractor is its own ie_key, never the playlist's.
+	if e := info.Entries[0]; e.ID != "a" || e.Extractor != "Youtube" {
+		t.Errorf("entry = %+v, want id a, extractor Youtube", e)
+	}
+	if e := info.Entries[1]; e.ID != "b" || e.Extractor != "" {
+		t.Errorf("entry = %+v, want id b, no extractor", e)
 	}
 }
 

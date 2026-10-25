@@ -50,7 +50,7 @@ type Item struct {
 	Title      string         `json:"title,omitempty"`
 	Uploader   string         `json:"uploader,omitempty"`
 	Extractor  string         `json:"extractor,omitempty"`
-	VideoID    string         `json:"-"`
+	VideoID    string         `json:"video_id,omitempty"` // yt-dlp's id of the video
 	Duration   float64        `json:"duration,omitempty"`
 	Format     ytdlp.Format   `json:"format"`
 	Resolution string         `json:"resolution"`

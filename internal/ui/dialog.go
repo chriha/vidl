@@ -579,6 +579,7 @@ func (m *Model) queueDetails() {
 			Uploader:     info.Uploader,
 			Duration:     info.Duration,
 			Extractor:    info.Extractor,
+			VideoID:      info.ID,
 			Format:       format,
 			Resolution:   res,
 			Clip:         clip,
@@ -594,7 +595,8 @@ func (m *Model) queueDetails() {
 			continue
 		}
 		reqs = append(reqs, queue.NewItem{
-			URL: e.URL, Title: e.Title, Duration: e.Duration, Format: format, Resolution: res,
+			URL: e.URL, Title: e.Title, Duration: e.Duration, Extractor: e.Extractor, VideoID: e.ID,
+			Format: format, Resolution: res,
 			Template: template, Subtitles: subtitles, SponsorBlock: sponsorBlock,
 		})
 	}
