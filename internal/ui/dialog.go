@@ -205,7 +205,7 @@ func (m Model) handleDialogMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if urls := extractURLs(msg.Content); len(urls) > 1 {
-			d.showBatch(urls)
+			m.showBatch(urls)
 			return m, nil
 		}
 		d.input, cmd = d.input.Update(msg)
@@ -231,6 +231,9 @@ func (m Model) handleDialogMsg(msg tea.Msg) (Model, tea.Cmd) {
 		d.showDetails(msg.info, m.mgr.Config())
 		if msg.info.IsPlaylist {
 			d.showEntries(len(msg.info.Entries))
+			m.markEntryDups()
+		} else if it, ok := m.mgr.FindDuplicate(d.singleItem()); ok {
+			d.step, d.dup = stepDuplicate, &it
 		}
 	case spinner.TickMsg:
 		if d.step == stepProbing {
@@ -273,20 +276,35 @@ func (m Model) handleDialogKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 	case stepEntries:
 		m.handleEntriesKey(msg.String())
+	case stepDuplicate:
+		switch msg.String() {
+		case "esc":
+			d.step, d.dup = stepInput, nil
+			return m, d.input.Focus()
+		case "enter":
+			d.step, d.dup = stepDetails, nil
+			return m, d.focusField()
+		}
 	case stepDetails:
 		return m.handleDetailsKey(msg)
 	case stepBatch:
 		switch msg.String() {
 		case "esc":
-			d.step, d.batch = stepInput, nil
+			d.step, d.batch, d.batchDups, d.err = stepInput, nil, nil, nil
 		case "h", "left":
 			d.changeStatus(-1)
 		case "l", "right", "space":
 			d.changeStatus(1)
 		case "enter":
-			reqs := make([]queue.NewItem, len(d.batch))
+			var reqs []queue.NewItem
 			for i, u := range d.batch {
-				reqs[i] = queue.NewItem{URL: u}
+				if !d.batchDups[i] {
+					reqs = append(reqs, queue.NewItem{URL: u})
+				}
+			}
+			if len(reqs) == 0 {
+				d.err = errAllDuplicates
+				return m, nil
 			}
 			m.queueAndClose(reqs, d.status)
 		}
@@ -406,7 +424,7 @@ func (m Model) submitURL() (Model, tea.Cmd) {
 	d := m.dialog
 	value := strings.TrimSpace(d.input.Value())
 	if urls := extractURLs(value); len(urls) > 1 {
-		d.showBatch(urls)
+		m.showBatch(urls)
 		return m, nil
 	}
 	if value == "" {
@@ -423,11 +441,6 @@ func (m Model) submitURL() (Model, tea.Cmd) {
 		return probeResultMsg{id: id, info: info, err: err}
 	}
 	return m, tea.Batch(d.spinner.Tick, probe)
-}
-
-// showBatch asks to add the pasted urls, queued by default.
-func (d *newDialog) showBatch(urls []string) {
-	d.step, d.batch, d.err, d.status = stepBatch, urls, nil, addQueued
 }
 
 // showDetails switches to the details step with the config's defaults.
@@ -583,20 +596,10 @@ func (m *Model) queueDetails() {
 			d.err = fmt.Errorf("clip %w", err)
 			return
 		}
-		m.queueAndClose([]queue.NewItem{{
-			URL:          cmpStr(info.URL, strings.TrimSpace(d.input.Value())),
-			Title:        info.Title,
-			Uploader:     info.Uploader,
-			Duration:     info.Duration,
-			Extractor:    info.Extractor,
-			VideoID:      info.ID,
-			Format:       format,
-			Resolution:   res,
-			Clip:         clip,
-			Template:     template,
-			Subtitles:    subtitles,
-			SponsorBlock: sponsorBlock,
-		}}, d.status)
+		r := d.singleItem()
+		r.Format, r.Resolution, r.Clip = format, res, clip
+		r.Template, r.Subtitles, r.SponsorBlock = template, subtitles, sponsorBlock
+		m.queueAndClose([]queue.NewItem{r}, d.status)
 		return
 	}
 	var reqs []queue.NewItem
@@ -630,6 +633,19 @@ func (m *Model) queueAndClose(reqs []queue.NewItem, status int) {
 		}
 	}
 	m.refresh()
+}
+
+// singleItem is the probed single video, without the details step's choices.
+func (d *newDialog) singleItem() queue.NewItem {
+	info := d.info
+	return queue.NewItem{
+		URL:       cmpStr(info.URL, strings.TrimSpace(d.input.Value())),
+		Title:     info.Title,
+		Uploader:  info.Uploader,
+		Duration:  info.Duration,
+		Extractor: info.Extractor,
+		VideoID:   info.ID,
+	}
 }
 
 func cmpStr(a, b string) string {
@@ -669,20 +685,34 @@ func (m Model) dialogView() string {
 			"", dimStyle.Render("esc cancel"))
 	case stepEntries:
 		lines = append(lines, m.entriesLines(inner)...)
+	case stepDuplicate:
+		lines = append(lines, d.duplicateLines(inner)...)
 	case stepDetails:
 		lines = append(lines, d.detailsLines(inner)...)
 	case stepBatch:
-		lines = append(lines, bold.Render(fmt.Sprintf("Add %d URLs with defaults?", len(d.batch))), "")
+		if skipped := len(d.batch) - d.batchNew(); skipped > 0 {
+			lines = append(lines, bold.Render(fmt.Sprintf("Add %d of %d URLs with defaults?", d.batchNew(), len(d.batch))),
+				dimStyle.Render(fmt.Sprintf("skipping %d already downloaded or queued", skipped)), "")
+		} else {
+			lines = append(lines, bold.Render(fmt.Sprintf("Add %d URLs with defaults?", len(d.batch))), "")
+		}
 		for i, u := range d.batch {
 			if i == playlistPreview {
 				lines = append(lines, dimStyle.Render(fmt.Sprintf("… and %d more", len(d.batch)-i)))
 				break
 			}
-			lines = append(lines, dimStyle.Render(ansi.Truncate(u, inner, "…")))
+			line := u
+			if d.batchDups[i] {
+				line = "skip · " + u
+			}
+			lines = append(lines, dimStyle.Render(ansi.Truncate(line, inner, "…")))
 		}
 		lines = append(lines, "",
-			ansi.Truncate(selector("Status", d.statusLabels(), d.status, true, false), inner, "…"),
-			"", dimStyle.Render(ansi.Truncate("h/l/space status · enter add · esc back", inner, "…")))
+			ansi.Truncate(selector("Status", d.statusLabels(), d.status, true, false), inner, "…"), "")
+		if d.err != nil {
+			lines = append(lines, errorStyle.Width(inner).MaxHeight(3).Render(d.err.Error()), "")
+		}
+		lines = append(lines, dimStyle.Render(ansi.Truncate("h/l/space status · enter add · esc back", inner, "…")))
 	}
 	return newDialogStyle.Width(w).Render(strings.Join(lines, "\n"))
 }
@@ -715,6 +745,9 @@ func (m Model) entriesLines(w int) []string {
 		line := fmt.Sprintf("%s%s %2d. %s", marker, box, i+1, cmpStr(e.Title, e.URL))
 		if dur := durationLabel(e.Duration); dur != "" {
 			line += dimStyle.Render(" · " + dur)
+		}
+		if dup := d.entryDups[i]; dup != "" {
+			line += errorStyle.Render(" · " + dup)
 		}
 		lines = append(lines, ansi.Truncate(line, w, "…"))
 	}
