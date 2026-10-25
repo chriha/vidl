@@ -32,7 +32,8 @@ const (
 	stepProbing
 	stepEntries // playlist checklist, before the details
 	stepDetails
-	stepBatch // several pasted URLs, queued with defaults
+	stepBatch     // several pasted URLs, queued with defaults
+	stepDuplicate // the probed video is already downloaded or queued
 )
 
 // Fields of the details step, in tab order.
@@ -78,6 +79,7 @@ var (
 	chosenFocusStyle  = activeTabStyle
 	errEmptyPlaylist  = errors.New("the playlist has no entries")
 	errNothingToQueue = errors.New("enter a URL")
+	errAllDuplicates  = errors.New("every URL is already downloaded or queued; add one on its own to add it anyway")
 )
 
 // probeResultMsg is the outcome of the probe with the given request id.
@@ -124,6 +126,14 @@ type newDialog struct {
 	top     int
 
 	batch []string
+	// batchDups marks the pasted URLs that are already downloaded or queued.
+	batchDups []bool
+
+	// dup is the existing download of the probed single video, shown by the
+	// duplicate step.
+	dup *queue.Item
+	// entryDups is, per playlist entry, why it's a duplicate ("" when not).
+	entryDups []string
 }
 
 // openDialog opens the new-download dialog and reads the clipboard to
