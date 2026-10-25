@@ -32,7 +32,17 @@ downloads resume where they stopped.
   replaces the file.
 - **Hold the queue** with `P`: running downloads finish and nothing new
   starts, whether queued, added or sent with `vidl add`. `s` still starts a
-  download, and `P` again lifts the hold. The hold lasts for the session.
+  download, and `P` again lifts the hold. **Stop the queue** with `S`: it
+  pauses every running download (partial files are kept) and holds the
+  queue; `S` again resumes only the downloads the stop paused, so ones you
+  paused yourself stay paused. A `⏸ HELD` or `⏸ STOPPED` badge at the right
+  of the tab bar shows either state. Both last for the session.
+- **Wait between downloads** with `W`: after a download ends (finished,
+  failed, paused, cancelled or removed), the next queued one starts only once
+  `wait_duration` (30s by default) has passed; each further end restarts the
+  countdown. `s` still starts a download at once. A `⏱ 30s` badge in the tab
+  bar shows the timer is on, and counts down while waiting (`⏱ 23s`,
+  `⏱ 1:45`); a hold or stop freezes the countdown. The setting is saved.
 - **Reordering**: move waiting downloads up and down the queue.
 - **Finished history** of completed downloads: open a file or show it in
   its folder, and clear the history.
@@ -297,6 +307,8 @@ automatically the next time you start vidl.
 | `s`                   | Start or resume; retries failed or cancelled        |
 | `p`                   | Pause, or put a paused download back in the queue   |
 | `P`                   | Hold or resume the queue (running downloads finish) |
+| `S`                   | Stop the queue (pauses running downloads) or start  |
+| `W`                   | Turn the wait between downloads on or off (saved)   |
 | `c`                   | Cancel (deletes partial files)                      |
 | `R`                   | Retry failed or cancelled, or re-download finished  |
 | `u` / `d`             | Move queued download up / down                      |
@@ -333,7 +345,8 @@ The Settings tab checks values as you enter them: the download folder must be
 an absolute path or start with `~`, and vidl offers to create it if it doesn't
 exist; the rate limit must be a number with an optional `K`, `M` or `G`
 suffix; SponsorBlock categories must be a comma-separated list of known
-categories, or `all`.
+categories, or `all`; the wait duration must be a duration such as `30s`, `2m`
+or `1m30s`, from 1 second to 1 hour.
 
 ```toml
 download_dir = "~/Downloads"
@@ -349,6 +362,8 @@ rate_limit = ""
 cookies_from_browser = ""
 notify = true
 sponsorblock_remove = ""
+wait_enabled = false
+wait_duration = "30s"
 ```
 
 | Key                    | Default                       | Description |
@@ -366,6 +381,8 @@ sponsorblock_remove = ""
 | `cookies_from_browser` | empty (disabled)              | Use cookies from `brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari` or `vivaldi`, for private, members-only or age-restricted videos. |
 | `notify`               | `true`                        | Desktop notification when a download finishes or fails. |
 | `sponsorblock_remove`  | empty (disabled)              | [SponsorBlock](https://sponsor.ajay.app/) categories to cut out of videos, comma-separated: `sponsor`, `intro`, `outro`, `selfpromo`, `preview`, `filler`, `interaction`, `music_offtopic`, or `all`. Cutting re-encodes around the cuts, so post-processing takes longer. |
+| `wait_enabled`         | `false`                       | Wait `wait_duration` after a download ends before the next queued one starts. |
+| `wait_duration`        | `30s`                         | How long to wait between downloads, as a duration such as `45s`, `2m` or `1m30s` (1s–1h). |
 
 Changing settings affects downloads that start afterwards; running downloads
 keep the settings they started with. `notify` applies at once.
@@ -524,6 +541,21 @@ yt-dlp still reads its own config file and plugins when vidl runs it, so
 these apply without changing vidl. See the
 [yt-dlp PO token guide](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide).
 
+If the error stays with all of these in place, YouTube blocks the IP address
+itself. Residential IPs get flagged too after many requests in a short time,
+and vidl adds a size lookup per queued download on top of the downloads. Get
+a new IP (with a dynamic address, reconnecting or restarting the router
+usually does it; compare `curl -s ipinfo.io/ip` before and after) or wait a
+few hours. Afterwards, lower `concurrency` and turn on `wait_enabled` for a
+while so the new IP isn't flagged too.
+
+As a last resort, set `cookies_from_browser` to a browser where you're
+logged in to YouTube, preferably with a spare account, since YouTube may flag
+the account instead. yt-dlp reads the browser's default profile. On macOS,
+allow the Keychain prompt for the browser's "Safe Storage" key, or reading
+Chrome-based browsers' cookies fails. Downloads that already failed keep
+their error until you retry them with `R`.
+
 **`[yt-dlp ffmpeg] not found on PATH`.** Install the missing tool (see
 [Requirements](#requirements)) and check `which yt-dlp ffmpeg`.
 
@@ -561,8 +593,10 @@ directly to see whether the problem is the site or vidl.
       or remove them together
 - [x] `vidl add` to queue URLs in a running vidl; single instance
 - [x] Hold the queue (`P`): running downloads finish, nothing new starts
+- [x] Stop and start the whole queue (`S`), with a held/stopped badge
 - [x] Estimated size for downloads that haven't started
 - [x] Add downloads queued, paused or started right away from the dialog
+- [x] Wait a set time between downloads (`W`), with a countdown badge
 
 ## License
 
