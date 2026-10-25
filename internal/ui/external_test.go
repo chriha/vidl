@@ -102,3 +102,62 @@ func TestErrorMsgShowsErrorToast(t *testing.T) {
 		t.Errorf("toast = %+v, want error %v", m.toast, err)
 	}
 }
+
+func TestAddURLsMsgSkipsDuplicates(t *testing.T) {
+	tests := []struct {
+		name      string
+		urls      []string
+		paused    bool
+		wantQueue []string
+		wantAdded int
+		wantToast string
+	}{
+		{
+			name:      "some duplicates",
+			urls:      []string{"https://a", "https://b"},
+			wantQueue: []string{"https://a", "https://b"},
+			wantAdded: 1,
+			wantToast: "Added 1 download from vidl add · skipped 1 already downloaded or queued",
+		},
+		{
+			name:      "paused",
+			urls:      []string{"https://b", "https://a", "https://c"},
+			paused:    true,
+			wantQueue: []string{"https://a", "https://b", "https://c"},
+			wantAdded: 2,
+			wantToast: "Added 2 downloads paused from vidl add · skipped 1 already downloaded or queued",
+		},
+		{
+			name:      "all duplicates",
+			urls:      []string{"https://a", "https://a"},
+			wantQueue: []string{"https://a"},
+			wantAdded: 0,
+			wantToast: "Nothing added from vidl add · skipped 2 already downloaded or queued",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, mgr, _ := newTestModel(t, 0, "https://a")
+			added := make(chan int, 1)
+			m = update(t, m, AddURLsMsg{URLs: tt.urls, Paused: tt.paused, Added: added})
+
+			if got := queuedURLs(mgr); !slices.Equal(got, tt.wantQueue) {
+				t.Errorf("queue = %q, want %q", got, tt.wantQueue)
+			}
+			if n := <-added; n != tt.wantAdded {
+				t.Errorf("added = %d, want %d", n, tt.wantAdded)
+			}
+			if m.toast.text != tt.wantToast || m.toast.err != nil {
+				t.Errorf("toast = %+v, want notice %q", m.toast, tt.wantToast)
+			}
+		})
+	}
+}
+
+func TestNoticeMsgShowsNotice(t *testing.T) {
+	m, _, _ := newTestModel(t, 0)
+	m = update(t, m, NoticeMsg{Text: "Skipped 1 URL already downloaded or queued"})
+	if want := "Skipped 1 URL already downloaded or queued"; m.toast.text != want || m.toast.err != nil {
+		t.Errorf("toast = %+v, want notice %q", m.toast, want)
+	}
+}

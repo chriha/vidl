@@ -239,6 +239,9 @@ func (m Model) update(msg tea.Msg) (Model, tea.Cmd) {
 	case ErrorMsg:
 		m.report(msg.Err)
 		return m, nil
+	case NoticeMsg:
+		m.notice(msg.Text)
+		return m, nil
 	}
 	if m.dialog != nil {
 		return m.handleDialogMsg(msg)

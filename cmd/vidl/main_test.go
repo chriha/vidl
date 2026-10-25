@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/chriha/vidl/internal/ipc"
 	"github.com/chriha/vidl/internal/queue"
 	"github.com/chriha/vidl/internal/ui"
+	"github.com/chriha/vidl/internal/ytdlp"
 )
 
 // testEnv isolates the config dir under a short temp path (macOS limits
@@ -352,4 +354,53 @@ func TestForwardToUI(t *testing.T) {
 			t.Fatalf("handler = %d, %v; want 0 and an error", n, err)
 		}
 	})
+}
+
+// idleRunner never downloads; size estimates fail.
+type idleRunner struct{}
+
+func (idleRunner) Run(context.Context, ytdlp.Job, func(ytdlp.Event)) error {
+	return errors.New("not downloading in tests")
+}
+
+func (idleRunner) Estimate(context.Context, string, ytdlp.Format, string, string) (*ytdlp.Estimate, error) {
+	return nil, errors.New("no estimates in tests")
+}
+
+func TestAddStartURLsSkipsDuplicates(t *testing.T) {
+	tests := []struct {
+		name        string
+		urls        []string
+		wantQueue   []string
+		wantSkipped int
+	}{
+		{"no urls", nil, []string{"https://a"}, 0},
+		{"new only", []string{"https://b"}, []string{"https://a", "https://b"}, 0},
+		{"duplicate skipped", []string{"https://a", "https://b"}, []string{"https://a", "https://b"}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Concurrency = 0
+			cfg.DownloadDir = t.TempDir()
+			mgr, err := queue.New(cfg, idleRunner{}, &queue.MemStore{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { mgr.Close() })
+			mgr.Add(queue.NewItem{URL: "https://a"})
+
+			if got := addStartURLs(mgr, tt.urls); got != tt.wantSkipped {
+				t.Errorf("skipped = %d, want %d", got, tt.wantSkipped)
+			}
+			q, _ := mgr.Snapshot()
+			var got []string
+			for _, it := range q {
+				got = append(got, it.URL)
+			}
+			if !slices.Equal(got, tt.wantQueue) {
+				t.Errorf("queue = %q, want %q", got, tt.wantQueue)
+			}
+		})
+	}
 }

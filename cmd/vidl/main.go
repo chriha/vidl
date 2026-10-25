@@ -119,9 +119,13 @@ func runUI(dir string, store queue.FileStore, urls []string) error {
 	if err != nil {
 		return fmt.Errorf("loading queue: %w", err)
 	}
-	addStartURLs(mgr, urls)
+	skipped := addStartURLs(mgr, urls)
 
 	p := tea.NewProgram(ui.New(mgr, runner, cfgPath).WithVersionCheck(runner.Version).WithNotifier(notify.System{}))
+	if skipped > 0 {
+		// send blocks until the UI loop runs.
+		go p.Send(ui.NoticeMsg{Text: fmt.Sprintf("Skipped %d already downloaded or queued", skipped)})
+	}
 	stopServer := serveAdds(dir, p.Send)
 	_, runErr := p.Run()
 	return errors.Join(runErr, stopServer(), mgr.Close())
@@ -134,8 +138,8 @@ func addStartURLs(mgr *queue.Manager, urls []string) (skipped int) {
 	for _, u := range urls {
 		reqs = append(reqs, queue.NewItem{URL: u})
 	}
-	mgr.Add(reqs...)
-	return 0
+	_, skipped = ui.AddUnique(mgr, reqs)
+	return skipped
 }
 
 // serveAdds listens for `vidl add` and hands the URLs to the UI through
