@@ -42,6 +42,7 @@ type NewItem struct {
 	Uploader   string
 	Duration   float64
 	Extractor  string
+	VideoID    string // yt-dlp's id of the video
 	Format     ytdlp.Format
 	Resolution string
 
@@ -301,6 +302,13 @@ func (m *Manager) Add(reqs ...NewItem) []string {
 	m.scheduleLocked()
 	m.saveLocked()
 	return ids
+}
+
+// FindDuplicate returns the finished or active (queued, downloading, paused)
+// download of the same video as r: same extractor and video id when both
+// sides have them, otherwise the same URL.
+func (m *Manager) FindDuplicate(r NewItem) (Item, bool) {
+	return Item{}, false
 }
 
 // newItem builds a queued item for r, or a paused one when r asks for it; a

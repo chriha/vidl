@@ -29,10 +29,11 @@ type Info struct {
 
 // Entry is a playlist item.
 type Entry struct {
-	ID       string
-	Title    string
-	URL      string
-	Duration float64
+	ID        string
+	Title     string
+	URL       string
+	Duration  float64
+	Extractor string // the entry's own extractor (ie_key), not the playlist's
 }
 
 type rawInfo struct {

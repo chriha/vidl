@@ -50,6 +50,7 @@ type Item struct {
 	Title      string         `json:"title,omitempty"`
 	Uploader   string         `json:"uploader,omitempty"`
 	Extractor  string         `json:"extractor,omitempty"`
+	VideoID    string         `json:"-"`
 	Duration   float64        `json:"duration,omitempty"`
 	Format     ytdlp.Format   `json:"format"`
 	Resolution string         `json:"resolution"`

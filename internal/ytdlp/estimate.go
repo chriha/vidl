@@ -10,6 +10,7 @@ import (
 // fetched with it.
 type Estimate struct {
 	Size      int64 // bytes; 0 when yt-dlp reports no size
+	ID        string
 	Title     string
 	Uploader  string
 	Extractor string
