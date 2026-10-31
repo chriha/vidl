@@ -92,6 +92,9 @@ func Listen(path string, handle Handler) (*Server, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create socket dir: %w", err)
 	}
+	if err := checkSocketDir(path); err != nil {
+		return nil, err
+	}
 	if _, err := os.Lstat(path); err == nil {
 		conn, err := net.DialTimeout("unix", path, DefaultTimeout)
 		if err == nil {
@@ -179,6 +182,9 @@ func (s *Server) serveConn(conn net.Conn) error {
 // added. It fails with ErrNoServer when the socket is missing or stale;
 // other dial errors (a timeout, no permission) are returned as they are.
 func Send(path string, req Request, timeout time.Duration) (int, error) {
+	if err := checkSocketDir(path); err != nil {
+		return 0, err
+	}
 	conn, err := net.DialTimeout("unix", path, timeout)
 	if err != nil {
 		if noListener(err) {

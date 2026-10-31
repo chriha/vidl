@@ -446,7 +446,7 @@ Audio formats download the best audio stream and convert it with ffmpeg.
 | `~/.config/vidl/config.toml`  | Settings. |
 | `~/.config/vidl/queue.json`   | Queue and history, written on every status change. Safe to delete while vidl is not running to start fresh. |
 | `~/.config/vidl/queue.lock`   | Held by the running vidl so only one owns the queue; `vidl add` takes it to append while none runs. |
-| `~/.config/vidl/vidl.sock`    | Socket the running vidl listens on for `vidl add`; removed on exit. If the config path is too long for a socket, it lives under the system temp directory instead. |
+| `~/.config/vidl/vidl.sock`    | Socket the running vidl listens on for `vidl add`; removed on exit. If the config path is too long for a socket, it lives under the system temp directory instead (vidl refuses that directory unless you own it and its mode is 0700). |
 
 Partial downloads (`*.part`, `*.ytdl`, `*.part-Frag*`) live in the download
 directory until the download finishes, is cancelled or removed.
