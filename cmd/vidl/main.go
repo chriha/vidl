@@ -171,16 +171,22 @@ const handoffTimeout = ipc.DefaultTimeout / 2
 
 // forwardToUI returns the socket handler of the running instance: it passes
 // the request to the UI loop through send and waits up to timeout for the count.
+// After the timeout the UI no longer adds the URLs, so a retry can't duplicate them.
 // send returns once the UI took the message or the program has ended.
 func forwardToUI(send func(tea.Msg), timeout time.Duration) ipc.Handler {
 	return func(req ipc.Request) (int, error) {
 		added := make(chan int, 1)
-		go send(ui.AddURLsMsg{URLs: req.Add, Paused: req.Paused, Added: added})
+		claim := &ui.Claim{}
+		go send(ui.AddURLsMsg{URLs: req.Add, Paused: req.Paused, Added: added, Claim: claim})
 		select {
 		case n := <-added:
 			return n, nil
 		case <-time.After(timeout):
-			return 0, errors.New("the vidl UI did not respond")
+			if claim.Abandon() {
+				return 0, errors.New("the vidl UI did not respond")
+			}
+			// The UI took the request just in time and replies right away.
+			return <-added, nil
 		}
 	}
 }

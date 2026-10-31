@@ -349,9 +349,13 @@ func TestForwardToUI(t *testing.T) {
 		}
 	})
 	t.Run("fails when the UI does not answer", func(t *testing.T) {
-		h := forwardToUI(func(tea.Msg) {}, 10*time.Millisecond)
+		var sent ui.AddURLsMsg
+		h := forwardToUI(func(msg tea.Msg) { sent = msg.(ui.AddURLsMsg) }, 10*time.Millisecond)
 		if n, err := h(ipc.Request{Add: []string{"https://a"}}); err == nil || n != 0 {
 			t.Fatalf("handler = %d, %v; want 0 and an error", n, err)
+		}
+		if sent.Claim.Take() {
+			t.Error("a late UI could still take the request after the timeout")
 		}
 	})
 }
