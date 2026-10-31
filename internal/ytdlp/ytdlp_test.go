@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -356,5 +357,91 @@ func TestRunCancel(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run did not return after cancel")
+	}
+}
+
+func ffmpegStats(ts string) string {
+	return fmt.Sprintf("frame= 100 fps=25 q=-1.0 size=    256KiB time=%s bitrate=1000.0kbits/s speed=2.5x", ts)
+}
+
+func TestTrackerClipFFmpegProgress(t *testing.T) {
+	tests := []struct {
+		name    string
+		clip    Clip
+		info    string
+		line    string
+		percent float64
+		isLog   bool
+	}{
+		{"bounded clip", Clip{Start: 10 * time.Second, End: 50 * time.Second}, "", "00:00:10.00", 25, false},
+		{"open end uses duration", Clip{Start: 60 * time.Second}, `{"duration": 160, "format_id": "1"}`, "00:00:25.00", 25, false},
+		{"clamped to 100", Clip{End: 10 * time.Second}, "", "00:00:12.00", 100, false},
+		{"unknown length stays a log line", Clip{Start: 5 * time.Second}, "", "00:00:10.00", 0, true},
+		{"time not available yet", Clip{End: 10 * time.Second}, "", "N/A", 0, true},
+		{"end before start", Clip{Start: 20 * time.Second, End: 10 * time.Second}, "", "00:00:05.00", 0, true},
+		{"no clip stays a log line", Clip{}, "", "00:00:10.00", 0, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tr := Tracker{Clip: tc.clip}
+			if tc.info != "" {
+				tr.Parse(prefixInfo + tc.info)
+			}
+			ev := tr.Parse(ffmpegStats(tc.line))
+			if tc.isLog {
+				if ev.Kind != EventLog {
+					t.Fatalf("kind = %v, want log", ev.Kind)
+				}
+				return
+			}
+			if ev.Kind != EventProgress {
+				t.Fatalf("kind = %v, want progress", ev.Kind)
+			}
+			if ev.Progress.Percent != tc.percent || ev.Progress.Stage != "downloading" {
+				t.Errorf("progress = %+v, want %v%% downloading", ev.Progress, tc.percent)
+			}
+		})
+	}
+}
+
+func TestTrackerClipFinishedDoesNotFallBack(t *testing.T) {
+	tr := Tracker{Clip: Clip{End: 10 * time.Second}}
+	tr.Parse(prefixInfo + `{"format_id": "137+140"}`)
+	tr.Parse(ffmpegStats("00:00:09.00"))
+	ev := tr.Parse(prefixDownload + `{"status": "finished", "filename": "c.mp4"}`)
+	if ev.Progress.Percent != 100 {
+		t.Errorf("finished percent = %v, want 100 (ffmpeg fetches all streams in one run)", ev.Progress.Percent)
+	}
+}
+
+func TestSplitLines(t *testing.T) {
+	sc := bufio.NewScanner(strings.NewReader("a\r\nb\rc\n\nd"))
+	sc.Split(splitLines)
+	var got []string
+	for sc.Scan() {
+		got = append(got, sc.Text())
+	}
+	if want := []string{"a", "b", "c", "", "d"}; !slices.Equal(got, want) {
+		t.Errorf("lines = %q, want %q", got, want)
+	}
+}
+
+func TestRunClipReportsFFmpegProgress(t *testing.T) {
+	r := fakeYtdlp(t, `
+printf 'frame= 1 time=00:00:05.00 bitrate=1k speed=1x\rframe= 2 time=00:00:10.00 bitrate=1k speed=1x\r' >&2
+echo 'vidl-dl:{"status": "finished", "filename": "c.mp4"}'
+`)
+	var percents []float64
+	job := Job{URL: "u", Dir: t.TempDir(), Clip: Clip{End: 20 * time.Second}}
+	err := r.Run(context.Background(), job, func(ev Event) {
+		if ev.Kind == EventProgress {
+			percents = append(percents, ev.Progress.Percent)
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(percents, 25) || !slices.Contains(percents, 50) {
+		t.Errorf("percents = %v, want intermediate 25 and 50", percents)
 	}
 }

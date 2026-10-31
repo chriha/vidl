@@ -2,6 +2,8 @@ package ytdlp
 
 import (
 	"encoding/json"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -75,6 +77,8 @@ type rawProgress struct {
 // Tracker turns yt-dlp output lines into events, keeping the state needed to
 // compute progress across multiple streams. It is not safe for concurrent use.
 type Tracker struct {
+	Clip         Clip    // the job's clip; ffmpeg progress lines are only parsed when set
+	duration     float64 // video length from the info line, 0 if unknown
 	streams      int
 	done         int
 	lastFinished string
@@ -110,6 +114,7 @@ func (t *Tracker) Parse(line string) Event {
 		var info VideoInfo
 		if json.Unmarshal([]byte(line[len(prefixInfo):]), &info) == nil {
 			t.streams = strings.Count(info.FormatID, "+") + 1
+			t.duration = info.Duration
 			return Event{Kind: EventInfo, Info: info}
 		}
 	case strings.HasPrefix(line, prefixFile):
@@ -118,7 +123,45 @@ func (t *Tracker) Parse(line string) Event {
 			return Event{Kind: EventFile, Path: path}
 		}
 	}
+	if !t.Clip.IsZero() {
+		if p, ok := t.ffmpegProgress(line); ok {
+			return Event{Kind: EventProgress, Progress: p}
+		}
+	}
 	return Event{Kind: EventLog, Line: line}
+}
+
+// ffmpegTimeRe matches the elapsed output time in ffmpeg's stats line, e.g.
+// "frame= 100 fps=25 size= 256KiB time=00:00:10.50 bitrate=1000.0kbits/s".
+var ffmpegTimeRe = regexp.MustCompile(`\btime=(\d+):(\d\d):(\d\d(?:\.\d+)?)\s+bitrate=`)
+
+// ffmpegProgress derives progress from an ffmpeg stats line. yt-dlp hands clip
+// downloads to ffmpeg, which emits no progress hooks while it runs, so the
+// output time relative to the clip length is the only signal.
+func (t *Tracker) ffmpegProgress(line string) (Progress, bool) {
+	m := ffmpegTimeRe.FindStringSubmatch(line)
+	if m == nil {
+		return Progress{}, false
+	}
+	length := t.Clip.End.Seconds() - t.Clip.Start.Seconds()
+	if t.Clip.End == 0 {
+		length = t.duration - t.Clip.Start.Seconds()
+	}
+	if length <= 0 {
+		return Progress{}, false
+	}
+	h, _ := strconv.Atoi(m[1])
+	mins, _ := strconv.Atoi(m[2])
+	secs, _ := strconv.ParseFloat(m[3], 64)
+	elapsed := float64(h*3600+mins*60) + secs
+	p := Progress{
+		Percent: min(elapsed/length*100, 100),
+		Stream:  1,
+		Streams: 1,
+		Stage:   "downloading",
+	}
+	t.last = p
+	return p, true
 }
 
 func (t *Tracker) download(r rawProgress) Progress {
@@ -135,13 +178,17 @@ func (t *Tracker) download(r rawProgress) Progress {
 	case total > 0:
 		frac = r.Downloaded / total
 	}
+	streams := t.streams
+	if !t.Clip.IsZero() {
+		streams = 1 // ffmpeg fetches every stream of a clip in a single run
+	}
 	p := Progress{
 		Downloaded: int64(r.Downloaded),
 		Total:      int64(total),
 		Speed:      r.Speed,
 		ETA:        time.Duration(r.ETA * float64(time.Second)),
 		Stream:     t.done + 1,
-		Streams:    max(t.streams, t.done+1),
+		Streams:    max(streams, t.done+1),
 		Stage:      "downloading",
 	}
 	p.Percent = min(max((float64(t.done)+frac)/float64(p.Streams)*100, 0), 100)
