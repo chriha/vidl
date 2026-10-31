@@ -13,7 +13,21 @@ type AddURLsMsg struct {
 	URLs   []string
 	Paused bool
 	Added  chan<- int
+	// Claim, when set, lets the sender withdraw the request: the model adds
+	// the URLs only if it wins the claim.
+	Claim *Claim
 }
+
+// Claim decides who owns an AddURLsMsg: the model that adds it or the sender
+// that gave up waiting. Exactly one of Take and Abandon succeeds.
+type Claim struct{}
+
+// Take reports whether the model may add the URLs. A nil Claim always allows it.
+func (c *Claim) Take() bool { return true }
+
+// Abandon reports whether the sender withdrew the request before the model
+// took it; the model then adds nothing.
+func (c *Claim) Abandon() bool { return true }
 
 // ErrorMsg shows an error from outside the UI loop as a toast.
 type ErrorMsg struct{ Err error }
