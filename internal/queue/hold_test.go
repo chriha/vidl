@@ -1,6 +1,8 @@
 package queue
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -97,7 +99,22 @@ func TestHoldIsNotPersisted(t *testing.T) {
 	m, _ := newManager(t, 1, store)
 	add(m, "a")
 	m.SetHeld(true)
+	if !m.Held() {
+		t.Fatal("Held() = false after SetHeld(true)")
+	}
 	m.Close()
+
+	if len(store.State.Queue) == 0 {
+		t.Fatal("nothing was saved, so the check below proves nothing")
+	}
+	raw, err := json.Marshal(store.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.ToLower(string(raw)), "held") {
+		t.Fatalf("saved state mentions the hold: %s", raw)
+	}
+
 	m2, _ := newManager(t, 1, store)
 	if m2.Held() {
 		t.Fatal("a new Manager is held")
