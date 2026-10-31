@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -359,7 +360,9 @@ func TestRunCancel(t *testing.T) {
 	}
 }
 
-const ffmpegStats = "frame= 100 fps=25 q=-1.0 size=    256KiB time=%s bitrate=1000.0kbits/s speed=2.5x"
+func ffmpegStats(ts string) string {
+	return fmt.Sprintf("frame= 100 fps=25 q=-1.0 size=    256KiB time=%s bitrate=1000.0kbits/s speed=2.5x", ts)
+}
 
 func TestTrackerClipFFmpegProgress(t *testing.T) {
 	tests := []struct {
@@ -374,6 +377,8 @@ func TestTrackerClipFFmpegProgress(t *testing.T) {
 		{"open end uses duration", Clip{Start: 60 * time.Second}, `{"duration": 160, "format_id": "1"}`, "00:00:25.00", 25, false},
 		{"clamped to 100", Clip{End: 10 * time.Second}, "", "00:00:12.00", 100, false},
 		{"unknown length stays a log line", Clip{Start: 5 * time.Second}, "", "00:00:10.00", 0, true},
+		{"time not available yet", Clip{End: 10 * time.Second}, "", "N/A", 0, true},
+		{"end before start", Clip{Start: 20 * time.Second, End: 10 * time.Second}, "", "00:00:05.00", 0, true},
 		{"no clip stays a log line", Clip{}, "", "00:00:10.00", 0, true},
 	}
 	for _, tc := range tests {
@@ -382,7 +387,7 @@ func TestTrackerClipFFmpegProgress(t *testing.T) {
 			if tc.info != "" {
 				tr.Parse(prefixInfo + tc.info)
 			}
-			ev := tr.Parse(strings.Replace(ffmpegStats, "%s", tc.line, 1))
+			ev := tr.Parse(ffmpegStats(tc.line))
 			if tc.isLog {
 				if ev.Kind != EventLog {
 					t.Fatalf("kind = %v, want log", ev.Kind)
@@ -402,7 +407,7 @@ func TestTrackerClipFFmpegProgress(t *testing.T) {
 func TestTrackerClipFinishedDoesNotFallBack(t *testing.T) {
 	tr := Tracker{Clip: Clip{End: 10 * time.Second}}
 	tr.Parse(prefixInfo + `{"format_id": "137+140"}`)
-	tr.Parse(strings.Replace(ffmpegStats, "%s", "00:00:09.00", 1))
+	tr.Parse(ffmpegStats("00:00:09.00"))
 	ev := tr.Parse(prefixDownload + `{"status": "finished", "filename": "c.mp4"}`)
 	if ev.Progress.Percent != 100 {
 		t.Errorf("finished percent = %v, want 100 (ffmpeg fetches all streams in one run)", ev.Progress.Percent)
