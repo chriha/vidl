@@ -688,7 +688,7 @@ func (m Model) dialogView() string {
 	case stepDuplicate:
 		lines = append(lines, d.duplicateLines(inner)...)
 	case stepDetails:
-		lines = append(lines, d.detailsLines(inner)...)
+		lines = append(lines, d.detailsLinesFit(inner, max(m.bodyHeight()-newDialogStyle.GetVerticalFrameSize(), 1))...)
 	case stepBatch:
 		if skipped := len(d.batch) - d.batchNew(); skipped > 0 {
 			lines = append(lines, bold.Render(fmt.Sprintf("Add %d of %d URLs with defaults?", d.batchNew(), len(d.batch))),
@@ -761,22 +761,80 @@ func (m Model) entriesLines(w int) []string {
 	return append(lines, dimStyle.Render(ansi.Truncate("j/k move · space toggle · a all/none · enter next · esc back", w, "…")))
 }
 
+// detailsLines renders the details step in full.
 func (d *newDialog) detailsLines(w int) []string {
+	head, fields, _, errLines, hint := d.detailsParts(w, 3)
+	lines := append(head, "")
+	lines = append(lines, fields...)
+	lines = append(lines, "")
+	if errLines != "" {
+		lines = append(lines, errLines, "")
+	}
+	return append(lines, hint)
+}
+
+// detailsLinesFit renders the details step in at most rows lines. The hint
+// always stays, then the error line, then the focused field and its
+// neighbours, then as much of the title as is left.
+func (d *newDialog) detailsLinesFit(w, rows int) []string {
+	if full := d.detailsLines(w); lineCount(full) <= rows {
+		return full
+	}
+	rows-- // the hint
+	errRows := 0
+	if d.err != nil && rows > 0 {
+		errRows = min(3, max(rows-1, 1))
+	}
+	head, fields, focusAt, errLines, hint := d.detailsParts(w, max(errRows, 1))
+	rows -= errRows
+	var lines []string
+	if k := min(len(fields), max(rows, 0)); k > 0 {
+		top := windowTop(0, focusAt, k, len(fields))
+		lines = append(lines, fields[top:top+k]...)
+		rows -= k
+	}
+	if rows > 0 {
+		title := splitLines(head)
+		lines = append(title[:min(rows, len(title))], lines...)
+	}
+	if errRows > 0 {
+		lines = append(lines, errLines)
+	}
+	return append(lines, hint)
+}
+
+// lineCount is the number of rendered lines in lines, whose elements may
+// themselves span several lines.
+func lineCount(lines []string) int {
+	return len(splitLines(lines))
+}
+
+func splitLines(lines []string) []string {
+	var out []string
+	for _, l := range lines {
+		out = append(out, strings.Split(l, "\n")...)
+	}
+	return out
+}
+
+// detailsParts renders the pieces of the details step: the title block, one
+// line per field, the index of the focused field among them, the error
+// (at most errRows lines, empty without one) and the hint.
+func (d *newDialog) detailsParts(w, errRows int) (head, fields []string, focusAt int, errLines, hint string) {
 	info := d.info
 	bold := lipgloss.NewStyle().Bold(true)
-	var lines []string
 	if info.IsPlaylist {
-		lines = append(lines,
+		head = []string{
 			ansi.Truncate(bold.Render("Playlist: ")+cmpStr(info.Title, info.URL), w, "…"),
-			dimStyle.Render(joinNonEmpty(fmt.Sprintf("%d of %d entries", checkedCount(d.checked), len(info.Entries)), info.Uploader, info.Extractor)))
+			dimStyle.Render(joinNonEmpty(fmt.Sprintf("%d of %d entries", checkedCount(d.checked), len(info.Entries)), info.Uploader, info.Extractor))}
 	} else {
 		title := bold.Width(w).MaxHeight(2).Render(cmpStr(info.Title, info.URL))
 		size := ""
 		if info.FilesizeApprox > 0 {
 			size = "~" + humanBytes(info.FilesizeApprox)
 		}
-		lines = append(lines, title,
-			dimStyle.Render(ansi.Truncate(joinNonEmpty(info.Uploader, info.Extractor, durationLabel(info.Duration), size), w, "…")))
+		head = []string{title,
+			dimStyle.Render(ansi.Truncate(joinNonEmpty(info.Uploader, info.Extractor, durationLabel(info.Duration), size), w, "…"))}
 	}
 
 	formats := make([]string, len(ytdlp.Formats))
@@ -791,37 +849,38 @@ func (d *newDialog) detailsLines(w int) []string {
 	if d.subtitles {
 		subtitles = 1
 	}
-	lines = append(lines, "",
-		ansi.Truncate(selector("Type", formats, d.format, d.focus == focusFormat, false), w, "…"),
-		ansi.Truncate(selector("Resolution", resLabels, d.res, d.focus == focusResolution, d.audio()), w, "…"))
-	if !info.IsPlaylist {
-		lines = append(lines,
-			ansi.Truncate(fieldLabel("Clip start", d.focus == focusClipStart)+" "+d.clipStart.View(), w, "…"),
-			ansi.Truncate(fieldLabel("Clip end", d.focus == focusClipEnd)+" "+d.clipEnd.View(), w, "…"))
+	var ids []int
+	add := func(id int, line string) {
+		ids = append(ids, id)
+		fields = append(fields, ansi.Truncate(line, w, "…"))
 	}
-	lines = append(lines,
-		ansi.Truncate(fieldLabel("Template", d.focus == focusTemplate)+" "+d.template.View(), w, "…"),
-		ansi.Truncate(selector("Subtitles", []string{"off", "embed"}, subtitles, d.focus == focusSubtitles, false), w, "…"))
+	add(focusFormat, selector("Type", formats, d.format, d.focus == focusFormat, false))
+	add(focusResolution, selector("Resolution", resLabels, d.res, d.focus == focusResolution, d.audio()))
+	if !info.IsPlaylist {
+		add(focusClipStart, fieldLabel("Clip start", d.focus == focusClipStart)+" "+d.clipStart.View())
+		add(focusClipEnd, fieldLabel("Clip end", d.focus == focusClipEnd)+" "+d.clipEnd.View())
+	}
+	add(focusTemplate, fieldLabel("Template", d.focus == focusTemplate)+" "+d.template.View())
+	add(focusSubtitles, selector("Subtitles", []string{"off", "embed"}, subtitles, d.focus == focusSubtitles, false))
 	if d.sponsorBlockShown {
 		sponsorBlock := 0
 		if d.sponsorBlock {
 			sponsorBlock = 1
 		}
-		lines = append(lines,
-			ansi.Truncate(selector("Sponsors", []string{"keep", "remove"}, sponsorBlock, d.focus == focusSponsorBlock, false), w, "…"))
+		add(focusSponsorBlock, selector("Sponsors", []string{"keep", "remove"}, sponsorBlock, d.focus == focusSponsorBlock, false))
 	}
-	lines = append(lines,
-		ansi.Truncate(selector("Status", d.statusLabels(), d.status, d.focus == focusStatus, false), w, "…"),
-		"")
+	add(focusStatus, selector("Status", d.statusLabels(), d.status, d.focus == focusStatus, false))
+	focusAt = max(slices.Index(ids, d.focus), 0)
+
 	if d.err != nil {
-		lines = append(lines, errorStyle.Width(w).MaxHeight(3).Render(d.err.Error()), "")
+		errLines = errorStyle.Width(w).MaxHeight(errRows).Render(d.err.Error())
 	}
 	action := "enter queue"
 	if info.IsPlaylist {
 		action = fmt.Sprintf("enter queue %d downloads", checkedCount(d.checked))
 	}
-	lines = append(lines, dimStyle.Render(ansi.Truncate(action+" · tab/↑/↓ field · h/l/space change · esc back", w, "…")))
-	return lines
+	hint = dimStyle.Render(ansi.Truncate(action+" · tab/↑/↓ field · h/l/space change · esc back", w, "…"))
+	return head, fields, focusAt, errLines, hint
 }
 
 // fieldLabel renders a field's label, marked when the field is focused.

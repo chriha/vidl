@@ -871,3 +871,40 @@ func TestDialogQueuesVideoIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestDialogDetailsFitShortTerminal(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V", URL: "https://x.test/v"}}}
+	for _, height := range []int{10, 12, 16, 20} {
+		t.Run(fmt.Sprint(height), func(t *testing.T) {
+			m, _ := probeDetails(t, p, "https://x.test/v")
+			m = update(t, m, tea.WindowSizeMsg{Width: 100, Height: height})
+			for range 4 { // focus a field that sits low in the list
+				m = press(t, m, "tab")
+			}
+			m.dialog.clipStart.SetValue("abc")
+			m = press(t, m, "enter") // invalid clip: error line shown too
+			if m.dialog.err == nil {
+				t.Fatal("no error to show")
+			}
+			view := m.dialogView()
+			if h := lipgloss.Height(view); h > m.bodyHeight() {
+				t.Errorf("dialog is %d lines, body only %d:\n%s", h, m.bodyHeight(), view)
+			}
+			for _, want := range []string{"esc back", "Template", strings.Fields(m.dialog.err.Error())[0]} {
+				if !strings.Contains(view, want) {
+					t.Errorf("%q not visible:\n%s", want, view)
+				}
+			}
+		})
+	}
+}
+
+func TestDialogDetailsUnchangedWhenItFits(t *testing.T) {
+	p := &fakeProber{infos: map[string]*ytdlp.Info{"https://x.test/v": {Title: "V", URL: "https://x.test/v"}}}
+	m, _ := probeDetails(t, p, "https://x.test/v")
+	m = update(t, m, tea.WindowSizeMsg{Width: 100, Height: 40})
+	want := strings.Join(m.dialog.detailsLines(m.dialogWidth()-newDialogStyle.GetHorizontalFrameSize()), "\n")
+	if got := newDialogStyle.Width(m.dialogWidth()).Render(want); got != m.dialogView() {
+		t.Errorf("dialog changed at normal size:\n%s\nwant\n%s", m.dialogView(), got)
+	}
+}
