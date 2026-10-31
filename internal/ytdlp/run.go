@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -83,7 +84,19 @@ func (j Job) Args() []string {
 // splitLines splits output into lines at \n, \r\n or a lone \r (ffmpeg
 // rewrites its progress line with \r).
 func splitLines(data []byte, atEOF bool) (int, []byte, error) {
-	return bufio.ScanLines(data, atEOF)
+	i := bytes.IndexAny(data, "\r\n")
+	switch {
+	case i < 0:
+		if atEOF && len(data) > 0 {
+			return len(data), data, nil
+		}
+		return 0, nil, nil
+	case data[i] == '\r' && i+1 == len(data) && !atEOF:
+		return 0, nil, nil // might be the start of \r\n
+	case data[i] == '\r' && i+1 < len(data) && data[i+1] == '\n':
+		return i + 2, data[:i], nil
+	}
+	return i + 1, data[:i], nil
 }
 
 // Runner executes yt-dlp.
@@ -124,7 +137,7 @@ func (r Runner) Run(ctx context.Context, job Job, onEvent func(Event)) error {
 
 	var (
 		mu      sync.Mutex
-		tracker Tracker
+		tracker = Tracker{Clip: job.Clip}
 		lastErr string
 		wg      sync.WaitGroup
 	)
@@ -151,6 +164,7 @@ func (r Runner) Run(ctx context.Context, job Job, onEvent func(Event)) error {
 		defer wg.Done()
 		sc := bufio.NewScanner(rd)
 		sc.Buffer(make([]byte, 64*1024), 1<<20)
+		sc.Split(splitLines)
 		for sc.Scan() {
 			handle(sc.Text())
 		}

@@ -231,7 +231,8 @@ and cancelled downloads don't count.
   `[[h:]m:]s`, e.g. `90`, `1:30` or `1:02:03`; leave start empty to begin at
   the start and end empty to go to the end. The end must be after the start,
   otherwise the dialog shows an error and doesn't queue. Clips are cut by
-  ffmpeg, so a paused clip starts over when resumed.
+  ffmpeg, so a paused clip starts over when resumed. Progress is read from
+  ffmpeg's output time, so it needs the video's length when the end is empty.
 - **Template** is the filename template for this download, prefilled with
   the setting; empty or unchanged follows the setting.
 - **Subtitles** embeds subtitles for this download, defaulting to the
