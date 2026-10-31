@@ -80,6 +80,12 @@ func (j Job) Args() []string {
 	return append(args, "--", j.URL)
 }
 
+// splitLines splits output into lines at \n, \r\n or a lone \r (ffmpeg
+// rewrites its progress line with \r).
+func splitLines(data []byte, atEOF bool) (int, []byte, error) {
+	return bufio.ScanLines(data, atEOF)
+}
+
 // Runner executes yt-dlp.
 type Runner struct {
 	Bin string // defaults to "yt-dlp" on PATH

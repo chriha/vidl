@@ -75,6 +75,8 @@ type rawProgress struct {
 // Tracker turns yt-dlp output lines into events, keeping the state needed to
 // compute progress across multiple streams. It is not safe for concurrent use.
 type Tracker struct {
+	Clip         Clip // the job's clip; ffmpeg progress lines are only parsed when set
+	duration     float64
 	streams      int
 	done         int
 	lastFinished string
