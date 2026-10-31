@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/chriha/vidl/internal/queue"
 )
@@ -13,7 +14,28 @@ type AddURLsMsg struct {
 	URLs   []string
 	Paused bool
 	Added  chan<- int
+	// Claim, when set, lets the sender withdraw the request: the model adds
+	// the URLs only if it wins the claim.
+	Claim *Claim
 }
+
+// Claim decides who owns an AddURLsMsg: the model that adds it or the sender
+// that gave up waiting. Exactly one of Take and Abandon succeeds.
+type Claim struct{ state atomic.Int32 }
+
+const (
+	claimTaken     = 1
+	claimAbandoned = 2
+)
+
+// Take reports whether the model may add the URLs. A nil Claim always allows it.
+func (c *Claim) Take() bool {
+	return c == nil || c.state.CompareAndSwap(0, claimTaken) || c.state.Load() == claimTaken
+}
+
+// Abandon reports whether the sender withdrew the request before the model
+// took it; the model then adds nothing.
+func (c *Claim) Abandon() bool { return c.state.CompareAndSwap(0, claimAbandoned) }
 
 // ErrorMsg shows an error from outside the UI loop as a toast.
 type ErrorMsg struct{ Err error }
@@ -38,6 +60,9 @@ func AddUnique(mgr *queue.Manager, reqs []queue.NewItem) (ids []string, skipped 
 
 // addExternal queues the URLs of msg without touching the open view or dialog.
 func (m *Model) addExternal(msg AddURLsMsg) {
+	if !msg.Claim.Take() {
+		return // the sender gave up and reported a failure
+	}
 	reqs := make([]queue.NewItem, len(msg.URLs))
 	for i, u := range msg.URLs {
 		reqs[i] = queue.NewItem{URL: u, Paused: msg.Paused}

@@ -161,3 +161,46 @@ func TestNoticeMsgShowsNotice(t *testing.T) {
 		t.Errorf("toast = %+v, want notice %q", m.toast, want)
 	}
 }
+
+func TestAddURLsMsgAbandonedAddsNothing(t *testing.T) {
+	m, mgr, _ := newTestModel(t, 0, "existing")
+	claim := &Claim{}
+	if !claim.Abandon() {
+		t.Fatal("abandon failed on a fresh claim")
+	}
+	added := make(chan int, 1)
+	m = update(t, m, AddURLsMsg{URLs: []string{"https://a"}, Added: added, Claim: claim})
+
+	if got := queuedURLs(mgr); !slices.Equal(got, []string{"existing"}) {
+		t.Errorf("queue = %q, want only the existing download", got)
+	}
+	if len(added) != 0 {
+		t.Error("count sent for an abandoned request")
+	}
+	if m.toast.text != "" {
+		t.Errorf("toast = %q, want none", m.toast.text)
+	}
+}
+
+func TestAddURLsMsgTakenClaimAdds(t *testing.T) {
+	m, mgr, _ := newTestModel(t, 0)
+	m = update(t, m, AddURLsMsg{URLs: []string{"https://a"}, Claim: &Claim{}})
+	if got := queuedURLs(mgr); !slices.Equal(got, []string{"https://a"}) {
+		t.Errorf("queue = %q", got)
+	}
+}
+
+func TestClaim(t *testing.T) {
+	var nilClaim *Claim
+	if !nilClaim.Take() {
+		t.Error("nil claim: Take = false, want true")
+	}
+	c := &Claim{}
+	if !c.Take() || c.Abandon() {
+		t.Error("after Take, Abandon must fail")
+	}
+	c = &Claim{}
+	if !c.Abandon() || c.Take() {
+		t.Error("after Abandon, Take must fail")
+	}
+}
