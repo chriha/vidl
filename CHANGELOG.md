@@ -4,7 +4,8 @@ All notable changes to vidl are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+From the next release on, release notes are generated from the commit history and
+published on the [releases page](https://github.com/chriha/vidl/releases).
 
 ## [0.1.0]
 

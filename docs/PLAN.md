@@ -88,8 +88,8 @@ cmd/vidl/main.go       flags, PATH check, config load (writes defaults on
 cmd/vidl/version.go    version from ldflags or `go install` build info,
                        per-OS install hint
 .github/workflows/     ci.yml (make check on Linux/macOS, Windows vet and
-                       build), release.yml (tag v* → make dist → GitHub
-                       release with the CHANGELOG section as notes)
+                       build), release.yml (tag v* → GoReleaser → GitHub
+                       release + Homebrew tap; tags via make release)
 internal/ytdlp/        no UI or queue knowledge
   format.go            Format type, Formats, Resolutions, FormatArgs
   run.go               Job, Job.Args(), Runner.Run
@@ -430,8 +430,9 @@ dialog can be tested with a fake.
   Windows) and writes `dist/checksums.txt`.
 - GitHub Actions: CI (`make check` on ubuntu and macos; Windows `go vet` and
   `go build`, since the ytdlp tests fake yt-dlp with shell scripts) and a
-  release workflow on `v*` tags that publishes `dist/*` with the version's
-  `CHANGELOG.md` section as notes.
+  release workflow on `v*` tags that runs GoReleaser (archives, checksums,
+  GitHub release with a grouped changelog, formula pushed to the
+  `chriha/homebrew-vidl` tap). `make release` computes and pushes the tag.
 - `CHANGELOG.md` (Keep a Changelog) with the 0.1.0 entry.
 - README: release binaries, `go install`, real clone URL, winget, releasing.
 - Windows pause/cancel: `CREATE_NEW_PROCESS_GROUP` and

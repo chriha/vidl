@@ -125,14 +125,20 @@ YouTube additionally needs a JavaScript runtime (such as
 
 ## Installation
 
-Download a binary for your platform from the
+With Homebrew (macOS and Linux; installs yt-dlp and ffmpeg too):
+
+```sh
+brew install chriha/vidl/vidl
+```
+
+Or download the archive for your platform from the
 [releases page](https://github.com/chriha/vidl/releases), check it against
-`checksums.txt`, make it executable and put it on your `PATH`:
+`checksums.txt`, unpack it and put `vidl` on your `PATH`:
 
 ```sh
 shasum -a 256 -c checksums.txt --ignore-missing
-chmod +x vidl-*-darwin-arm64
-mv vidl-*-darwin-arm64 /usr/local/bin/vidl
+tar -xzf vidl_*_darwin_arm64.tar.gz vidl
+mv vidl /usr/local/bin/vidl
 ```
 
 On macOS, a downloaded binary is quarantined by Gatekeeper; allow it with
@@ -490,7 +496,9 @@ make help       # list all targets
 | `lint`      | Run `golangci-lint` if it's installed. |
 | `tidy`      | `go mod tidy`. |
 | `check`     | `fmt-check`, `vet` and `race`. |
-| `dist`      | Cross-compile for macOS, Linux and Windows (arm64, amd64) into `dist/`, with `checksums.txt`. |
+| `dist`      | Cross-compile plain binaries for macOS, Linux and Windows (arm64, amd64) into `dist/`, with `checksums.txt`. |
+| `snapshot`  | Build a local GoReleaser snapshot (archives and Homebrew formula) into `dist/` without publishing. |
+| `release`   | Tag and push the next release (see below). |
 | `clean`     | Remove `bin/`, `dist/` and coverage output. |
 
 Override the embedded version with `make build VERSION=1.0.0`.
@@ -498,18 +506,31 @@ Override the embedded version with `make build VERSION=1.0.0`.
 ### Releasing
 
 CI runs `make check` on Linux and macOS for every push and pull request,
-and vets and builds the Windows target. To release, move the changes under
-`Unreleased` in [CHANGELOG.md](CHANGELOG.md) to a new version section, then
-tag and push:
+and vets and builds the Windows target. `make release` tags the next release
+from the [Conventional Commits](https://www.conventionalcommits.org) since
+the last `v*` tag: a `feat` bumps the minor version, anything else the patch;
+the first release is `v0.1.0`. It checks that you are on `main` with a clean
+tree, in sync with `origin/main`, that the tag doesn't exist yet, that the CI
+workflow succeeded on HEAD and that the `HOMEBREW_TAP_TOKEN` secret exists
+(needs `gh`). It then shows the version and the commits and asks before it
+creates and pushes an annotated tag.
 
-```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
+The pushed tag runs the release workflow: `make check`, then GoReleaser
+builds the archives for macOS, Linux and Windows (amd64, arm64) with
+`checksums.txt`, publishes the GitHub release with a changelog grouped into
+features and fixes, and pushes the formula to the Homebrew tap
+[chriha/homebrew-vidl](https://github.com/chriha/homebrew-vidl).
 
-The release workflow runs `make check` and `make dist`, and publishes the
-binaries and checksums as a GitHub release with that version's changelog
-section as release notes.
+| Variable    | Effect |
+| ----------- | ------ |
+| `DRY_RUN=1` | show the version and commits, create no tag |
+| `MAJOR=1`   | allow a major bump (a `type!:` commit or `BREAKING CHANGE:` footer); refused otherwise, as v2+ needs a `/v2` module path for `go install` to see it |
+| `V=vX.Y.Z`  | tag this version instead; must be greater than the last release |
+| `SKIP_CI=1` | skip the CI and `HOMEBREW_TAP_TOKEN` checks |
+
+One-time setup: create a fine-grained personal access token with
+*Contents: read and write* on the tap repository only, and store it as the
+secret of this repository: `gh secret set HOMEBREW_TAP_TOKEN`.
 
 To try vidl without touching your real config and downloads, point it at a
 scratch config directory:
