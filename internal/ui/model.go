@@ -284,7 +284,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	k := m.keys
 	switch {
 	case key.Matches(msg, k.Quit):
-		return m, m.askQuit()
+		cmd := m.askQuit()
+		return m, cmd
 	case key.Matches(msg, k.Help):
 		m.help.ShowAll = !m.help.ShowAll
 	case key.Matches(msg, k.NextTab):
