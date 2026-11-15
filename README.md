@@ -318,7 +318,9 @@ narrower terminals the table drops the size, ETA, speed and status columns,
 in that order.
 
 Quitting stops running downloads and keeps their partial files; they continue
-automatically the next time you start vidl.
+automatically the next time you start vidl. While a download is running, `q`
+and `ctrl+c` first ask for confirmation (`y` quits, `n`/`esc` stays); a second
+`ctrl+c` quits immediately.
 
 ## Keybindings
 
@@ -353,7 +355,7 @@ automatically the next time you start vidl.
 | `X`                   | Clear finished history (asks for confirmation)      |
 | `n`                   | New download                                        |
 | `?`                   | Toggle full help                                    |
-| `q` / `ctrl+c`        | Quit                                                |
+| `q` / `ctrl+c`        | Quit (asks while downloads are running)             |
 
 On the Settings tab, `j`/`k` move between settings, `h`/`l` (or `←`/`→`)
 change the concurrency and cycle through choices, `space` or `enter` toggles

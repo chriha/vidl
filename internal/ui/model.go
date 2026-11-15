@@ -59,6 +59,7 @@ type confirmation struct {
 	verb     string // label of y
 	action   func() error
 	done     string // notice shown after the action succeeded, optional
+	quit     bool   // y quits the program instead of running action
 
 	marked []string   // ids a bulk action applies to instead of action
 	bulk   bulkAction // set for bulk actions on marked rows
@@ -283,7 +284,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	k := m.keys
 	switch {
 	case key.Matches(msg, k.Quit):
-		return m, tea.Quit
+		cmd := m.askQuit()
+		return m, cmd
 	case key.Matches(msg, k.Help):
 		m.help.ShowAll = !m.help.ShowAll
 	case key.Matches(msg, k.NextTab):
@@ -401,6 +403,9 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case "y", "Y":
 		c := m.confirm
 		m.confirm = nil
+		if c.quit {
+			return m, tea.Quit
+		}
 		if c.bulk != nil {
 			m.applyMarked(c.marked, c.bulk)
 		} else if err := c.action(); err != nil {
@@ -415,6 +420,32 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.confirm = nil
 	}
 	return m, nil
+}
+
+// askQuit quits right away, or asks first while downloads are running.
+// Typing into the settings editor keeps its immediate ctrl+c quit.
+func (m *Model) askQuit() tea.Cmd {
+	if m.settings.edit != nil || m.settings.mkdir != "" {
+		return tea.Quit
+	}
+	items, _ := m.mgr.Snapshot()
+	running := 0
+	for _, it := range items {
+		if it.Status == queue.Downloading {
+			running++
+		}
+	}
+	if running == 0 {
+		return tea.Quit
+	}
+	m.confirm = &confirmation{
+		question: "Quit vidl?",
+		subject:  plural(running, "download") + " running",
+		note:     "Downloads stop now and resume the next time you start vidl. ctrl+c quits immediately.",
+		verb:     "quit",
+		quit:     true,
+	}
+	return nil
 }
 
 func (m *Model) askRemove() {
