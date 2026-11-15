@@ -32,7 +32,7 @@ semver() {
 }
 
 if [ -z "$last" ]; then
-	next=v0.1.0 reason="first release"
+	next=v1.0.0 reason="first release"
 	set -- 0 0 0
 else
 	# shellcheck disable=SC2046
