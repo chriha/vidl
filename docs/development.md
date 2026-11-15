@@ -37,7 +37,7 @@ CI runs `make check` on Linux and macOS for every push and pull request,
 and vets and builds the Windows target. `make release` tags the next release
 from the [Conventional Commits](https://www.conventionalcommits.org) since
 the last `v*` tag: a `feat` bumps the minor version, anything else the patch;
-the first release is `v0.1.0`. It checks that you are on `main` with a clean
+the first release is `v1.0.0`. It checks that you are on `main` with a clean
 tree, in sync with `origin/main`, that the tag doesn't exist yet, that the CI
 workflow succeeded on HEAD and that the `HOMEBREW_TAP_TOKEN` secret exists
 (needs `gh`). It then shows the version and the commits and asks before it
