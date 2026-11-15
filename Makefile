@@ -7,7 +7,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 PLATFORMS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64
 
 .DEFAULT_GOAL := build
-.PHONY: help build run install uninstall test race cover vet fmt fmt-check lint tidy check dist clean
+.PHONY: help build run install uninstall test race cover vet fmt fmt-check lint tidy check dist release snapshot clean
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -60,6 +60,12 @@ dist: ## Cross-compile release binaries and checksums into dist/
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out $(PKG) || exit 1; \
 	done
 	@cd $(DIST) && shasum -a 256 $(BINARY)-* > checksums.txt
+
+release: ## Tag and push the next release from the Conventional Commits (see README)
+	@scripts/release.sh
+
+snapshot: ## Build a local GoReleaser snapshot into dist/ (no publish)
+	goreleaser release --snapshot --clean
 
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) $(DIST) coverage.out

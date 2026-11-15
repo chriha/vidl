@@ -1,0 +1,69 @@
+version: 2
+
+project_name: vidl
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: vidl
+    main: ./cmd/vidl
+    binary: vidl
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: vidl
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - name: vidl
+    repository:
+      owner: chriha
+      name: homebrew-vidl
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/chriha/vidl
+    description: Terminal UI for downloading videos with yt-dlp, with a persistent queue
+    license: MIT
+    dependencies:
+      - name: yt-dlp
+      - name: ffmpeg
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/vidl --version")
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^style:'
+      - '^chore:'
