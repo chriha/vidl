@@ -76,7 +76,7 @@ if [ "${SKIP_CI:-}" != 1 ]; then
 	esac
 	# the release workflow pushes the Homebrew formula with this token; without it the tag would publish a half release
 	gh secret list --json name --jq '.[].name' | grep -qx HOMEBREW_TAP_TOKEN ||
-		die "repo secret HOMEBREW_TAP_TOKEN is not set (see README.md), or pass SKIP_CI=1"
+		die "repo secret HOMEBREW_TAP_TOKEN is not set (see docs/development.md), or pass SKIP_CI=1"
 fi
 
 echo "next version: $next ($reason)"
