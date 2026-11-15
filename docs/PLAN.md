@@ -4,7 +4,7 @@ Handoff document for continuing development. Milestones 1–9 are done;
 this file describes what was decided, what exists and what was learned the hard
 way, in enough detail to continue without the original conversation.
 
-Read `README.md` first for the user-facing picture, then this file.
+Read `README.md` and the topic files in `docs/` (usage, keybindings, configuration) first for the user-facing picture, then this file.
 
 ## Product requirements
 
@@ -289,7 +289,7 @@ message.
 - Commit once per milestone (or meaningful sub-step), after `make check`
   passes, with a descriptive message and the attribution line your session
   specifies. Ask before pushing; agents open draft PRs and never merge.
-- Update `README.md` when behaviour changes: flip the keybinding table's
+- Update the docs when behaviour changes (`docs/keybindings.md`, `docs/roadmap.md`, `docs/usage.md`): flip the keybinding table's
   "planned" entries to ✅ and tick the roadmap.
 
 ## Remaining milestones

@@ -1,6 +1,6 @@
 # vidl
 
-A Bubble Tea terminal UI for downloading videos through yt-dlp, with a persistent download queue. User docs: `README.md`;
+A Bubble Tea terminal UI for downloading videos through yt-dlp, with a persistent download queue. User docs: `README.md` (overview, install) and topic files in `docs/` (`usage`, `keybindings`, `configuration`, `how-it-works`, `troubleshooting`, `development`, `roadmap`);
 architecture, conventions and remaining milestones: `docs/PLAN.md` (read its "Lessons learned" before touching `ytdlp` or `queue`).
 
 ## Commands
@@ -21,7 +21,7 @@ architecture, conventions and remaining milestones: `docs/PLAN.md` (read its "Le
 - Short doc comments on exported identifiers; comments only where the code isn't self-explanatory; small focused files.
 - `ytdlp` and `queue` never import UI code; the UI uses the manager's public methods and snapshots only.
 - Never swallow errors; surface them in the UI footer or as a toast.
-- Behaviour changes update `README.md` (keybinding table, roadmap).
+- Behaviour changes update the docs: `docs/keybindings.md` (keybinding table), `docs/roadmap.md`, and `docs/usage.md` / `docs/configuration.md` where affected; `README.md` only for the feature list and install.
 - Tests and manual runs never touch the real config dir or downloads (isolated `XDG_CONFIG_HOME`, fake runner, `MemStore`).
 
 ## Git

@@ -61,7 +61,7 @@ dist: ## Cross-compile release binaries and checksums into dist/
 	done
 	@cd $(DIST) && shasum -a 256 $(BINARY)-* > checksums.txt
 
-release: ## Tag and push the next release from the Conventional Commits (see README)
+release: ## Tag and push the next release from the Conventional Commits (see docs/development.md)
 	@scripts/release.sh
 
 snapshot: ## Build a local GoReleaser snapshot into dist/ (no publish)

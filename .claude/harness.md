@@ -48,7 +48,7 @@ Before every commit — none of:
 - shelling out with an unquoted/unvalidated string
 - `//nolint` or skipped tests to make a check pass
 - `go get` / `go mod tidy` / hand-edited `go.mod`/`go.sum` (a dependency change is an open question)
-- behaviour change without updating `README.md` (keybinding table, roadmap)
+- behaviour change without updating the docs (`docs/keybindings.md` table, `docs/roadmap.md`, `docs/usage.md`, `docs/configuration.md`; `README.md` feature list)
 
 ## Test conventions
 - Table-driven; goal-first (specify behavior, edge cases, error paths), one behavior per test, assert behavior not internals.
